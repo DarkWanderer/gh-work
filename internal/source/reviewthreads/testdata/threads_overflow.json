@@ -1,0 +1,17 @@
+{
+  "node": {
+    "reviewThreads": {
+      "pageInfo": { "hasNextPage": false, "endCursor": "" },
+      "nodes": [
+        {
+          "id": "PRRT_11",
+          "isResolved": false,
+          "isOutdated": false,
+          "path": "b.go",
+          "line": 2,
+          "comments": { "nodes": [ { "author": { "login": "carol" }, "body": "overflow page thread", "url": "https://github.com/o/r/pull/2#r11", "createdAt": "2026-01-01T00:00:00Z" } ] }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,11 @@
+[1mo/r[0m
+  PR #1 Fix sync bug https://github.com/o/r/pull/1
+    [36m[review-thread][0m main.go:14 https://github.com/o/r/pull/1#discussion_r1
+        codex: This looks wrong. …
+    [36m[review-thread][0m main.go:40[2m (outdated)[0m https://github.com/o/r/pull/1#discussion_r2
+        alice: Still applies?
+    [36m[pr-check-failure][0m sync [31mFAILURE[0m https://github.com/o/r/pull/1/checks/1 (run 100 job 200)
+  branch main
+    [36m[branch-check-failure][0m ci/status [31mERROR[0m https://github.com/o/r/commit/def5678
+[33mwarning: search result count exceeds 1000; some PRs may be missing[0m
+[31merror: branch-checks: rate limited[0m

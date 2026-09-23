@@ -1,0 +1,11 @@
+o/r
+  PR #1 Fix sync bug https://github.com/o/r/pull/1
+    [review-thread] main.go:14 https://github.com/o/r/pull/1#discussion_r1
+        codex: This looks wrong. …
+    [review-thread] main.go:40 (outdated) https://github.com/o/r/pull/1#discussion_r2
+        alice: Still applies?
+    [pr-check-failure] sync FAILURE https://github.com/o/r/pull/1/checks/1 (run 100 job 200)
+  branch main
+    [branch-check-failure] ci/status ERROR https://github.com/o/r/commit/def5678
+warning: search result count exceeds 1000; some PRs may be missing
+error: branch-checks: rate limited

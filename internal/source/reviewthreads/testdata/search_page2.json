@@ -1,0 +1,30 @@
+{
+  "search": {
+    "issueCount": 2,
+    "pageInfo": { "hasNextPage": false, "endCursor": "" },
+    "nodes": [
+      {
+        "id": "PR_kwDOA2",
+        "number": 2,
+        "title": "Add many threads",
+        "url": "https://github.com/o/r/pull/2",
+        "isDraft": true,
+        "headRefName": "many-threads",
+        "repository": { "nameWithOwner": "o/r" },
+        "reviewThreads": {
+          "pageInfo": { "hasNextPage": true, "endCursor": "THREADS_C1" },
+          "nodes": [
+            {
+              "id": "PRRT_10",
+              "isResolved": false,
+              "isOutdated": false,
+              "path": "a.go",
+              "line": 1,
+              "comments": { "nodes": [ { "author": { "login": "bob" }, "body": "first page thread", "url": "https://github.com/o/r/pull/2#r10", "createdAt": "2026-01-01T00:00:00Z" } ] }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "repository": {
+    "pullRequest": {
+      "id": "PR_kwDOA9",
+      "number": 9,
+      "title": "Single PR target",
+      "url": "https://github.com/o/r/pull/9",
+      "isDraft": false,
+      "headRefName": "single",
+      "reviewThreads": {
+        "pageInfo": { "hasNextPage": false, "endCursor": "" },
+        "nodes": [
+          {
+            "id": "PRRT_90",
+            "isResolved": false,
+            "isOutdated": false,
+            "path": "single.go",
+            "line": 5,
+            "comments": { "nodes": [ { "author": { "login": "dave" }, "body": "on the single PR", "url": "https://github.com/o/r/pull/9#r90", "createdAt": "2026-01-01T00:00:00Z" } ] }
+          }
+        ]
+      }
+    }
+  }
+}

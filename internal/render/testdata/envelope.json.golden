@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "target": {
+    "kind": "repo",
+    "owner": "o",
+    "repo": "r"
+  },
+  "items": [
+    {
+      "id": "PRRT_1",
+      "kind": "review-thread",
+      "repo": "o/r",
+      "pr": {
+        "number": 1,
+        "title": "Fix sync bug",
+        "url": "https://github.com/o/r/pull/1",
+        "headRef": "fix-sync",
+        "isDraft": false
+      },
+      "thread": {
+        "path": "main.go",
+        "line": 14,
+        "isOutdated": false,
+        "url": "https://github.com/o/r/pull/1#discussion_r1",
+        "comments": [
+          {
+            "author": "codex",
+            "body": "This looks wrong.\nSee line above.",
+            "url": "https://github.com/o/r/pull/1#r1",
+            "createdAt": "2026-01-02T03:04:05Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "PRRT_2",
+      "kind": "review-thread",
+      "repo": "o/r",
+      "pr": {
+        "number": 1,
+        "title": "Fix sync bug",
+        "url": "https://github.com/o/r/pull/1",
+        "headRef": "fix-sync",
+        "isDraft": false
+      },
+      "thread": {
+        "path": "main.go",
+        "line": 40,
+        "isOutdated": true,
+        "url": "https://github.com/o/r/pull/1#discussion_r2",
+        "comments": [
+          {
+            "author": "alice",
+            "body": "Still applies?",
+            "url": "https://github.com/o/r/pull/1#r2",
+            "createdAt": "2026-01-02T03:04:05Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "CR_1",
+      "kind": "pr-check-failure",
+      "repo": "o/r",
+      "pr": {
+        "number": 1,
+        "title": "Fix sync bug",
+        "url": "https://github.com/o/r/pull/1",
+        "headRef": "fix-sync",
+        "isDraft": false
+      },
+      "commit": "abc1234",
+      "check": {
+        "name": "sync",
+        "conclusion": "FAILURE",
+        "url": "https://github.com/o/r/pull/1/checks/1",
+        "workflow": "CI",
+        "runId": 100,
+        "jobId": 200
+      }
+    },
+    {
+      "id": "SC_1",
+      "kind": "branch-check-failure",
+      "repo": "o/r",
+      "branch": "main",
+      "commit": "def5678",
+      "check": {
+        "name": "ci/status",
+        "conclusion": "ERROR",
+        "url": "https://github.com/o/r/commit/def5678"
+      }
+    }
+  ],
+  "warnings": [
+    "search result count exceeds 1000; some PRs may be missing"
+  ],
+  "errors": [
+    {
+      "source": "branch-checks",
+      "message": "rate limited"
+    }
+  ]
+}

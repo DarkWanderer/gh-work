@@ -1,0 +1,21 @@
+{
+  "node": {
+    "statusCheckRollup": {
+      "contexts": {
+        "pageInfo": { "hasNextPage": false, "endCursor": "" },
+        "nodes": [
+          {
+            "__typename": "CheckRun",
+            "id": "CR_9b",
+            "name": "deploy",
+            "conclusion": "ACTION_REQUIRED",
+            "status": "COMPLETED",
+            "databaseId": 901,
+            "detailsUrl": "https://github.com/o/r/pull/9/checks/9b",
+            "checkSuite": { "workflowRun": { "databaseId": 800, "workflow": { "name": "CI" } } }
+          }
+        ]
+      }
+    }
+  }
+}

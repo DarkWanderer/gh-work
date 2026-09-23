@@ -1,0 +1,18 @@
+{
+  "node": {
+    "statusCheckRollup": {
+      "contexts": {
+        "pageInfo": { "hasNextPage": false, "endCursor": "" },
+        "nodes": [
+          {
+            "__typename": "StatusContext",
+            "id": "SC_b2",
+            "context": "ci/legacy",
+            "state": "ERROR",
+            "targetUrl": "https://ci.example.com/billing/2"
+          }
+        ]
+      }
+    }
+  }
+}
