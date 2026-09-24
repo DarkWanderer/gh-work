@@ -13,40 +13,49 @@ import (
 
 var update = flag.Bool("update", false, "update golden files")
 
-func sampleItems() []work.Item {
+// sampleGroups reproduces, via the grouped work.Group model, the exact item
+// sequence the old flat-item golden fixtures were built from: PRRT_1,
+// PRRT_2, CR_1, PR_kwDOA1 on PR #1, then SC_1 on branch main. Keeping the
+// same golden files unchanged proves the --json v1 contract didn't move.
+func sampleGroups() []work.Group {
 	created := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
-	pr1 := work.PRRef{Number: 1, Title: "Fix sync bug", URL: "https://github.com/o/r/pull/1", HeadRef: "fix-sync", IsDraft: false}
-	return []work.Item{
-		work.ReviewThread{
-			ID: "PRRT_1", Repo: "o/r", PR: pr1,
-			Thread: work.Thread{
-				Path: "main.go", Line: 14, IsOutdated: false, URL: "https://github.com/o/r/pull/1#discussion_r1",
-				Comments: []work.Comment{{Author: "codex", Body: "This looks wrong.\nSee line above.", URL: "https://github.com/o/r/pull/1#r1", CreatedAt: created}},
+	return []work.Group{
+		work.PullRequest{
+			ID: "PR_1", Repo: "o/r", Number: 1, Title: "Fix sync bug",
+			URL: "https://github.com/o/r/pull/1", HeadRef: "fix-sync", IsDraft: false,
+			Items: []work.PRItem{
+				work.ReviewThread{
+					ID: "PRRT_1",
+					Thread: work.Thread{
+						Path: "main.go", Line: 14, IsOutdated: false, URL: "https://github.com/o/r/pull/1#discussion_r1",
+						Comments: []work.Comment{{Author: "codex", Body: "This looks wrong.\nSee line above.", URL: "https://github.com/o/r/pull/1#r1", CreatedAt: created}},
+					},
+				},
+				work.ReviewThread{
+					ID: "PRRT_2",
+					Thread: work.Thread{
+						Path: "main.go", Line: 40, IsOutdated: true, URL: "https://github.com/o/r/pull/1#discussion_r2",
+						Comments: []work.Comment{{Author: "alice", Body: "Still applies?", URL: "https://github.com/o/r/pull/1#r2", CreatedAt: created}},
+					},
+				},
+				work.PRCheckFailure{CheckFailure: work.CheckFailure{
+					ID: "CR_1", Commit: "abc1234",
+					Check: work.Check{Name: "sync", Conclusion: "FAILURE", URL: "https://github.com/o/r/pull/1/checks/1", Workflow: "CI", RunID: 100, JobID: 200},
+				}},
+				work.MergeConflict{ID: "PR_kwDOA1", BaseRef: "main"},
 			},
 		},
-		work.ReviewThread{
-			ID: "PRRT_2", Repo: "o/r", PR: pr1,
-			Thread: work.Thread{
-				Path: "main.go", Line: 40, IsOutdated: true, URL: "https://github.com/o/r/pull/1#discussion_r2",
-				Comments: []work.Comment{{Author: "alice", Body: "Still applies?", URL: "https://github.com/o/r/pull/1#r2", CreatedAt: created}},
+		work.Branch{
+			Repo: "o/r", Name: "main", Commit: "def5678",
+			Failures: []work.CheckFailure{
+				{ID: "SC_1", Commit: "def5678", Check: work.Check{Name: "ci/status", Conclusion: "ERROR", URL: "https://github.com/o/r/commit/def5678"}},
 			},
-		},
-		work.PRCheckFailure{
-			ID: "CR_1", Repo: "o/r", PR: pr1, Commit: "abc1234",
-			Check: work.Check{Name: "sync", Conclusion: "FAILURE", URL: "https://github.com/o/r/pull/1/checks/1", Workflow: "CI", RunID: 100, JobID: 200},
-		},
-		work.MergeConflict{
-			ID: "PR_kwDOA1", Repo: "o/r", PR: pr1, BaseRef: "main",
-		},
-		work.BranchCheckFailure{
-			ID: "SC_1", Repo: "o/r", Branch: "main", Commit: "def5678",
-			Check: work.Check{Name: "ci/status", Conclusion: "ERROR", URL: "https://github.com/o/r/commit/def5678"},
 		},
 	}
 }
 
 func sampleEnvelope() Envelope {
-	return NewEnvelope(target.Repo{Owner: "o", Name: "r"}, sampleItems(),
+	return NewEnvelope(target.Repo{Owner: "o", Name: "r"}, sampleGroups(),
 		[]string{"search result count exceeds 1000; some PRs may be missing"},
 		[]SourceError{{Source: "branch-checks", Message: "rate limited"}})
 }
@@ -103,6 +112,36 @@ func TestTextEmpty(t *testing.T) {
 	}
 }
 
+func TestTextGroupsRepoHeaderOnlyOncePerRepo(t *testing.T) {
+	groups := []work.Group{
+		work.Branch{Repo: "o/r", Name: "develop", Failures: []work.CheckFailure{{ID: "a", Check: work.Check{Name: "x", Conclusion: "ERROR"}}}},
+		work.Branch{Repo: "o/r", Name: "main", Failures: []work.CheckFailure{{ID: "b", Check: work.Check{Name: "x", Conclusion: "ERROR"}}}},
+		work.Branch{Repo: "o/other", Name: "main", Failures: []work.CheckFailure{{ID: "c", Check: work.Check{Name: "x", Conclusion: "ERROR"}}}},
+	}
+	e := NewEnvelope(target.Org{Owner: "o"}, groups, nil, nil)
+	var buf bytes.Buffer
+	if err := Text(&buf, e, false); err != nil {
+		t.Fatal(err)
+	}
+	got := buf.String()
+	if n := bytesCount(got, "o/r\n"); n != 1 {
+		t.Fatalf("repo header \"o/r\" printed %d times, want 1:\n%s", n, got)
+	}
+	if n := bytesCount(got, "o/other\n"); n != 1 {
+		t.Fatalf("repo header \"o/other\" printed %d times, want 1:\n%s", n, got)
+	}
+}
+
+func bytesCount(s, sub string) int {
+	n := 0
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			n++
+		}
+	}
+	return n
+}
+
 func TestEnvelopeEmptySlicesMarshalAsEmptyArrays(t *testing.T) {
 	var buf bytes.Buffer
 	e := NewEnvelope(target.Org{Owner: "o"}, nil, nil, nil)
@@ -119,7 +158,7 @@ func TestEnvelopeEmptySlicesMarshalAsEmptyArrays(t *testing.T) {
 
 func TestTargetInfoFrom(t *testing.T) {
 	cases := []struct {
-		in   interface{ Kind() target.Kind }
+		in   target.Target
 		want TargetInfo
 	}{
 		{target.Org{Owner: "o"}, TargetInfo{Kind: "org", Owner: "o"}},
@@ -127,7 +166,7 @@ func TestTargetInfoFrom(t *testing.T) {
 		{target.PR{Owner: "o", Name: "r", Number: 5}, TargetInfo{Kind: "pr", Owner: "o", Repo: "r", Number: 5}},
 	}
 	for _, c := range cases {
-		got := TargetInfoFrom(c.in.(target.Target))
+		got := TargetInfoFrom(c.in)
 		if got != c.want {
 			t.Errorf("TargetInfoFrom(%#v) = %#v, want %#v", c.in, got, c.want)
 		}

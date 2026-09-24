@@ -11,30 +11,22 @@ import (
 	"github.com/DarkWanderer/gh-work/internal/github/fake"
 )
 
-// noWorkFixtures registers empty-but-well-formed responses for every
-// source, for a given target shape, so RunContext exercises the full
-// collect->render pipeline without finding any work.
+// emptySearchFixtures registers empty-but-well-formed responses for the
+// shared PR scan and the branch scan, for a given org, so RunContext
+// exercises the full collect->render pipeline without finding any work.
 func emptySearchFixtures(c *fake.Client, owner string) {
 	q := "is:pr is:open archived:false user:" + owner
-	c.SetFixture("SearchReviewThreads", map[string]any{"q": q, "after": nil},
+	c.SetFixture("SearchPullRequests", map[string]any{"q": q, "after": nil},
 		[]byte(`{"search":{"issueCount":0,"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[]}}`))
-	c.SetFixture("SearchPRChecks", map[string]any{"q": q, "after": nil},
-		[]byte(`{"search":{"issueCount":0,"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[]}}`))
-	c.SetFixture("SearchMergeConflicts", map[string]any{"q": q, "after": nil},
-		[]byte(`{"search":{"issueCount":0,"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[]}}`))
-	c.SetFixture("OrgRepositories", map[string]any{"login": owner, "after": nil},
+	c.SetFixture("OwnerRepositories", map[string]any{"login": owner, "after": nil},
 		[]byte(`{"repositoryOwner":{"repositories":{"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[]}}}`))
 }
 
 func withWorkFixtures(c *fake.Client, owner string) {
 	q := "is:pr is:open archived:false user:" + owner
-	c.SetFixture("SearchReviewThreads", map[string]any{"q": q, "after": nil},
+	c.SetFixture("SearchPullRequests", map[string]any{"q": q, "after": nil},
 		[]byte(`{"search":{"issueCount":0,"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[]}}`))
-	c.SetFixture("SearchPRChecks", map[string]any{"q": q, "after": nil},
-		[]byte(`{"search":{"issueCount":0,"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[]}}`))
-	c.SetFixture("SearchMergeConflicts", map[string]any{"q": q, "after": nil},
-		[]byte(`{"search":{"issueCount":0,"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[]}}`))
-	c.SetFixture("OrgRepositories", map[string]any{"login": owner, "after": nil},
+	c.SetFixture("OwnerRepositories", map[string]any{"login": owner, "after": nil},
 		[]byte(`{"repositoryOwner":{"repositories":{"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[{
 			"nameWithOwner":"`+owner+`/r","isArchived":false,"isFork":false,
 			"defaultBranchRef":{"name":"main","target":{"id":"C_1","oid":"deadbeef","statusCheckRollup":{"contexts":{"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[
@@ -99,10 +91,11 @@ func TestRunContext_JSONOutput(t *testing.T) {
 func TestRunContext_SourceFilter(t *testing.T) {
 	c := fake.NewClient()
 	q := "is:pr is:open archived:false user:acme"
-	// only register the review-threads fixture; if --source correctly
-	// restricts to review-threads, pr-checks/branch-checks must never be
-	// queried, so their missing fixtures won't cause an error.
-	c.SetFixture("SearchReviewThreads", map[string]any{"q": q, "after": nil},
+	// only register the PR search fixture; if --source correctly restricts
+	// to review-threads, branch-checks (the only other selected-by-default
+	// check needing a different scan) must never run, so the missing
+	// OwnerRepositories fixture won't cause an error.
+	c.SetFixture("SearchPullRequests", map[string]any{"q": q, "after": nil},
 		[]byte(`{"search":{"issueCount":0,"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[]}}`))
 	var stdout, stderr bytes.Buffer
 	code := RunContext(context.Background(), Options{
@@ -162,13 +155,9 @@ func TestRunContext_IntervalBelowMinimumIsUsageError(t *testing.T) {
 func TestRunContext_PartialFailureExitsOne(t *testing.T) {
 	c := fake.NewClient()
 	q := "is:pr is:open archived:false user:acme"
-	c.SetFixture("SearchReviewThreads", map[string]any{"q": q, "after": nil},
+	c.SetFixture("SearchPullRequests", map[string]any{"q": q, "after": nil},
 		[]byte(`{"search":{"issueCount":0,"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[]}}`))
-	c.SetFixture("SearchPRChecks", map[string]any{"q": q, "after": nil},
-		[]byte(`{"search":{"issueCount":0,"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[]}}`))
-	c.SetFixture("SearchMergeConflicts", map[string]any{"q": q, "after": nil},
-		[]byte(`{"search":{"issueCount":0,"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[]}}`))
-	// branch-checks fixture deliberately missing -> that source errors.
+	// OwnerRepositories fixture deliberately missing -> branch-checks errors.
 	var stdout, stderr bytes.Buffer
 	code := RunContext(context.Background(), Options{
 		Args: []string{"acme", "--json"}, GH: c, Stdout: &stdout, Stderr: &stderr,
@@ -185,12 +174,10 @@ func TestRunContext_WatchReturnsOnThirdPoll(t *testing.T) {
 	c := fake.NewClient()
 	q := "is:pr is:open archived:false user:acme"
 	empty := []byte(`{"search":{"issueCount":0,"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[]}}`)
-	c.SetFixture("SearchReviewThreads", map[string]any{"q": q, "after": nil}, empty)
-	c.SetFixture("SearchPRChecks", map[string]any{"q": q, "after": nil}, empty)
-	c.SetFixture("SearchMergeConflicts", map[string]any{"q": q, "after": nil}, empty)
+	c.SetFixture("SearchPullRequests", map[string]any{"q": q, "after": nil}, empty)
 
 	var pollCount int32
-	// OrgRepositories fixture is swapped out from an atomic counter so the
+	// OwnerRepositories fixture is swapped out from an atomic counter so the
 	// first two polls report no work and the third reports a failure.
 	noWork := []byte(`{"repositoryOwner":{"repositories":{"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[]}}}`)
 	withWork := []byte(`{"repositoryOwner":{"repositories":{"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[{
@@ -198,12 +185,12 @@ func TestRunContext_WatchReturnsOnThirdPoll(t *testing.T) {
 		"defaultBranchRef":{"name":"main","target":{"id":"C_1","oid":"deadbeef","statusCheckRollup":{"contexts":{"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[
 			{"__typename":"StatusContext","id":"SC_1","context":"ci/status","state":"FAILURE","targetUrl":"https://ci.example.com/1"}
 		]}}}}}]}}}`)
-	c.SetFixture("OrgRepositories", map[string]any{"login": "acme", "after": nil}, noWork)
+	c.SetFixture("OwnerRepositories", map[string]any{"login": "acme", "after": nil}, noWork)
 
 	sleep := func(ctx context.Context, d time.Duration) error {
 		n := atomic.AddInt32(&pollCount, 1)
 		if n == 2 {
-			c.SetFixture("OrgRepositories", map[string]any{"login": "acme", "after": nil}, withWork)
+			c.SetFixture("OwnerRepositories", map[string]any{"login": "acme", "after": nil}, withWork)
 		}
 		return nil
 	}

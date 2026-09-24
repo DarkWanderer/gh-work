@@ -1,0 +1,41 @@
+{
+  "repositoryOwner": {
+    "repositories": {
+      "pageInfo": { "hasNextPage": true, "endCursor": "REPOS_C1" },
+      "nodes": [
+        {
+          "nameWithOwner": "o/active",
+          "isArchived": false,
+          "isFork": false,
+          "defaultBranchRef": {
+            "name": "main",
+            "target": {
+              "id": "C_active",
+              "oid": "deadbeef",
+              "statusCheckRollup": {
+                "contexts": {
+                  "pageInfo": { "hasNextPage": true, "endCursor": "CTX_B1" },
+                  "nodes": [
+                    { "__typename": "StatusContext", "id": "SC_active", "context": "ci/status", "state": "FAILURE", "targetUrl": "https://ci.example.com/active" }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "nameWithOwner": "o/archived",
+          "isArchived": true,
+          "isFork": false,
+          "defaultBranchRef": { "name": "main", "target": { "id": "C_arch", "oid": "aaaaaaa", "statusCheckRollup": null } }
+        },
+        {
+          "nameWithOwner": "o/forked",
+          "isArchived": false,
+          "isFork": true,
+          "defaultBranchRef": { "name": "main", "target": { "id": "C_fork", "oid": "bbbbbbb", "statusCheckRollup": null } }
+        }
+      ]
+    }
+  }
+}

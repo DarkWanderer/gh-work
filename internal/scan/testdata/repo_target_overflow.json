@@ -6,18 +6,17 @@
     "defaultBranchRef": {
       "name": "main",
       "target": {
-        "id": "C_billing2",
+        "id": "C_billing",
         "oid": "feedface",
         "statusCheckRollup": {
           "contexts": {
-            "pageInfo": { "hasNextPage": true, "endCursor": "CTX_C1" },
+            "pageInfo": { "hasNextPage": true, "endCursor": "CTX_BILL1" },
             "nodes": [
               {
                 "__typename": "CheckRun",
-                "id": "CR_b1",
+                "id": "CR_bill1",
                 "name": "build",
                 "conclusion": "FAILURE",
-                "status": "COMPLETED",
                 "databaseId": 400,
                 "detailsUrl": "https://github.com/o/billing/commit/feedface/checks/1",
                 "checkSuite": { "workflowRun": { "databaseId": 350, "workflow": { "name": "CI" } } }

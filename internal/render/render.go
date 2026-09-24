@@ -1,6 +1,8 @@
 // Package render turns a collected Envelope into the two output forms
-// `gh work` supports: indented JSON for agents, and grouped, optionally
-// colored text for humans.
+// `gh work` supports: indented JSON for agents (the flat v1 --json
+// contract, docs/output.md), and grouped, optionally colored text for
+// humans. Both walk work.Group/work.PRItem via their Visitor, never a type
+// switch, so a new variant is a compile error here until handled.
 package render
 
 import (
@@ -21,49 +23,161 @@ type TargetInfo struct {
 	Number int    `json:"number,omitempty"`
 }
 
-// TargetInfoFrom converts a target.Target into its JSON representation.
-func TargetInfoFrom(t target.Target) TargetInfo {
-	switch v := t.(type) {
-	case target.Org:
-		return TargetInfo{Kind: "org", Owner: v.Owner}
-	case target.Repo:
-		return TargetInfo{Kind: "repo", Owner: v.Owner, Repo: v.Name}
-	case target.PR:
-		return TargetInfo{Kind: "pr", Owner: v.Owner, Repo: v.Name, Number: v.Number}
-	default:
-		panic(fmt.Sprintf("render: unknown target type %T", t))
-	}
+// targetInfoVisitor builds a TargetInfo via target.Visitor dispatch.
+type targetInfoVisitor struct{ info TargetInfo }
+
+func (v *targetInfoVisitor) VisitOrg(o target.Org) error {
+	v.info = TargetInfo{Kind: "org", Owner: o.Owner}
+	return nil
 }
 
-// SourceError is a per-source failure that did not prevent other sources
-// from reporting items (partial failure).
+func (v *targetInfoVisitor) VisitRepo(r target.Repo) error {
+	v.info = TargetInfo{Kind: "repo", Owner: r.Owner, Repo: r.Name}
+	return nil
+}
+
+func (v *targetInfoVisitor) VisitPR(p target.PR) error {
+	v.info = TargetInfo{Kind: "pr", Owner: p.Owner, Repo: p.Name, Number: p.Number}
+	return nil
+}
+
+// TargetInfoFrom converts a target.Target into its JSON representation.
+func TargetInfoFrom(t target.Target) TargetInfo {
+	var v targetInfoVisitor
+	_ = t.Accept(&v) // targetInfoVisitor never returns an error
+	return v.info
+}
+
+// SourceError is a per-check failure that did not prevent other checks
+// from reporting groups (partial failure).
 type SourceError struct {
 	Source  string `json:"source"`
 	Message string `json:"message"`
 }
 
-// Envelope is the full `--json` output contract (schemaVersion: 1).
+// v1PRRef is the --json contract's embedded "pr" shape.
+type v1PRRef struct {
+	Number  int    `json:"number"`
+	Title   string `json:"title"`
+	URL     string `json:"url"`
+	HeadRef string `json:"headRef"`
+	IsDraft bool   `json:"isDraft"`
+}
+
+// The v1* types below are the flat --json contract's item shapes
+// (docs/output.md); each mirrors a work.PRItem/CheckFailure variant plus
+// the PR or branch it was found in, which the grouped work.Group no longer
+// repeats per item.
+type v1ReviewThread struct {
+	ID     string      `json:"id"`
+	Kind   work.Kind   `json:"kind"`
+	Repo   string      `json:"repo"`
+	PR     v1PRRef     `json:"pr"`
+	Thread work.Thread `json:"thread"`
+}
+
+type v1PRCheckFailure struct {
+	ID     string     `json:"id"`
+	Kind   work.Kind  `json:"kind"`
+	Repo   string     `json:"repo"`
+	PR     v1PRRef    `json:"pr"`
+	Commit string     `json:"commit"`
+	Check  work.Check `json:"check"`
+}
+
+type v1MergeConflict struct {
+	ID      string    `json:"id"`
+	Kind    work.Kind `json:"kind"`
+	Repo    string    `json:"repo"`
+	PR      v1PRRef   `json:"pr"`
+	BaseRef string    `json:"baseRef"`
+}
+
+type v1BranchCheckFailure struct {
+	ID     string     `json:"id"`
+	Kind   work.Kind  `json:"kind"`
+	Repo   string     `json:"repo"`
+	Branch string     `json:"branch"`
+	Commit string     `json:"commit"`
+	Check  work.Check `json:"check"`
+}
+
+// v1Builder flattens work.Group/work.PRItem into the v1 --json contract's
+// flat items array, via GroupVisitor/PRItemVisitor dispatch instead of a
+// type switch.
+type v1Builder struct {
+	items []any
+}
+
+func (b *v1Builder) VisitPullRequest(p work.PullRequest) {
+	ref := v1PRRef{Number: p.Number, Title: p.Title, URL: p.URL, HeadRef: p.HeadRef, IsDraft: p.IsDraft}
+	ib := prItemBuilder{b: b, repo: p.Repo, pr: ref}
+	for _, it := range p.Items {
+		it.Accept(ib)
+	}
+}
+
+func (b *v1Builder) VisitBranch(br work.Branch) {
+	for _, f := range br.Failures {
+		b.items = append(b.items, v1BranchCheckFailure{
+			ID: f.ID, Kind: work.KindBranchCheckFailure, Repo: br.Repo, Branch: br.Name, Commit: f.Commit, Check: f.Check,
+		})
+	}
+}
+
+type prItemBuilder struct {
+	b    *v1Builder
+	repo string
+	pr   v1PRRef
+}
+
+func (p prItemBuilder) VisitReviewThread(t work.ReviewThread) {
+	p.b.items = append(p.b.items, v1ReviewThread{ID: t.ID, Kind: work.KindReviewThread, Repo: p.repo, PR: p.pr, Thread: t.Thread})
+}
+
+func (p prItemBuilder) VisitPRCheckFailure(c work.PRCheckFailure) {
+	p.b.items = append(p.b.items, v1PRCheckFailure{
+		ID: c.ID, Kind: work.KindPRCheckFailure, Repo: p.repo, PR: p.pr, Commit: c.Commit, Check: c.Check,
+	})
+}
+
+func (p prItemBuilder) VisitMergeConflict(m work.MergeConflict) {
+	p.b.items = append(p.b.items, v1MergeConflict{ID: m.ID, Kind: work.KindMergeConflict, Repo: p.repo, PR: p.pr, BaseRef: m.BaseRef})
+}
+
+func flattenItems(groups []work.Group) []any {
+	b := &v1Builder{items: []any{}}
+	for _, g := range groups {
+		g.Accept(b)
+	}
+	return b.items
+}
+
+// Envelope is the full `--json` output contract (schemaVersion: 1). Groups
+// is the grouped data Text renders from; it's excluded from JSON since
+// Items already carries the flattened v1 shape.
 type Envelope struct {
 	SchemaVersion int           `json:"schemaVersion"`
 	Target        TargetInfo    `json:"target"`
-	Items         []work.Item   `json:"items"`
+	Items         []any         `json:"items"`
 	Warnings      []string      `json:"warnings"`
 	Errors        []SourceError `json:"errors"`
+	Groups        []work.Group  `json:"-"`
 }
 
 // NewEnvelope builds an Envelope, normalizing nil slices to empty ones so
 // they marshal as "[]" rather than "null".
-func NewEnvelope(t target.Target, items []work.Item, warnings []string, errs []SourceError) Envelope {
-	if items == nil {
-		items = []work.Item{}
-	}
+func NewEnvelope(t target.Target, groups []work.Group, warnings []string, errs []SourceError) Envelope {
 	if warnings == nil {
 		warnings = []string{}
 	}
 	if errs == nil {
 		errs = []SourceError{}
 	}
-	return Envelope{SchemaVersion: 1, Target: TargetInfoFrom(t), Items: items, Warnings: warnings, Errors: errs}
+	return Envelope{
+		SchemaVersion: 1, Target: TargetInfoFrom(t), Items: flattenItems(groups),
+		Warnings: warnings, Errors: errs, Groups: groups,
+	}
 }
 
 // JSON writes e as indented JSON, matching docs/output.md.
@@ -90,21 +204,16 @@ func colorize(useColor bool, code, s string) string {
 	return code + s + colorReset
 }
 
-// Text writes e grouped by repo, then by PR or branch, in the order items
-// already appear (callers are expected to pass deterministically sorted
-// items, as collect.Run produces).
+// Text writes e grouped by repo, then by PR or branch, in the order
+// e.Groups already appears (callers are expected to pass deterministically
+// sorted groups, as collect.Run produces).
 func Text(w io.Writer, e Envelope, useColor bool) error {
-	if len(e.Items) == 0 {
+	if len(e.Groups) == 0 {
 		fmt.Fprintln(w, "No work found.")
 	}
-	for _, g := range groupItems(e.Items) {
-		fmt.Fprintln(w, colorize(useColor, colorBold, g.repo))
-		for _, sg := range g.subgroups {
-			fmt.Fprintln(w, "  "+sg.header)
-			for _, it := range sg.items {
-				writeItemLines(w, it, useColor)
-			}
-		}
+	tw := &textWriter{w: w, useColor: useColor}
+	for _, g := range e.Groups {
+		g.Accept(tw)
 	}
 	for _, wmsg := range e.Warnings {
 		fmt.Fprintln(w, colorize(useColor, colorYellow, "warning: "+wmsg))
@@ -115,86 +224,78 @@ func Text(w io.Writer, e Envelope, useColor bool) error {
 	return nil
 }
 
-type subgroup struct {
-	header string
-	items  []work.Item
+// textWriter implements work.GroupVisitor, printing a repo header only
+// when the repo changes from the previous group (groups are pre-sorted by
+// repo, so this needs no lookahead or buffering).
+type textWriter struct {
+	w        io.Writer
+	useColor bool
+	curRepo  string
+	wroteAny bool
 }
 
-type repoGroup struct {
-	repo      string
-	subgroups []subgroup
-}
-
-// groupItems buckets a pre-sorted item list into contiguous repo, then
-// PR-or-branch groups, without re-sorting.
-func groupItems(items []work.Item) []repoGroup {
-	var groups []repoGroup
-	var curRepo, curKey string
-	for _, it := range items {
-		repo := it.ItemRepo()
-		key, header := subgroupKeyAndHeader(it)
-		if len(groups) == 0 || curRepo != repo {
-			groups = append(groups, repoGroup{repo: repo})
-		}
-		g := &groups[len(groups)-1]
-		if len(g.subgroups) == 0 || curRepo != repo || curKey != key {
-			g.subgroups = append(g.subgroups, subgroup{header: header})
-		}
-		curRepo, curKey = repo, key
-		sg := &g.subgroups[len(g.subgroups)-1]
-		sg.items = append(sg.items, it)
-	}
-	return groups
-}
-
-func subgroupKeyAndHeader(it work.Item) (key, header string) {
-	switch v := it.(type) {
-	case work.ReviewThread:
-		return prKey(v.PR), prHeader(v.PR)
-	case work.PRCheckFailure:
-		return prKey(v.PR), prHeader(v.PR)
-	case work.MergeConflict:
-		return prKey(v.PR), prHeader(v.PR)
-	case work.BranchCheckFailure:
-		return "branch:" + v.Branch, "branch " + v.Branch
-	default:
-		return "", ""
+func (tw *textWriter) repoHeader(repo string) {
+	if !tw.wroteAny || repo != tw.curRepo {
+		fmt.Fprintln(tw.w, colorize(tw.useColor, colorBold, repo))
+		tw.curRepo, tw.wroteAny = repo, true
 	}
 }
 
-func prKey(pr work.PRRef) string { return fmt.Sprintf("pr:%d", pr.Number) }
+func (tw *textWriter) VisitPullRequest(p work.PullRequest) {
+	tw.repoHeader(p.Repo)
+	fmt.Fprintln(tw.w, "  "+prHeader(p))
+	il := itemLineWriter{w: tw.w, useColor: tw.useColor}
+	for _, it := range p.Items {
+		it.Accept(il)
+	}
+}
 
-func prHeader(pr work.PRRef) string {
+func (tw *textWriter) VisitBranch(b work.Branch) {
+	tw.repoHeader(b.Repo)
+	fmt.Fprintln(tw.w, "  branch "+b.Name)
+	for _, f := range b.Failures {
+		writeCheckFailureLine(tw.w, "branch-check-failure", f, tw.useColor)
+	}
+}
+
+func prHeader(p work.PullRequest) string {
 	draft := ""
-	if pr.IsDraft {
+	if p.IsDraft {
 		draft = " (draft)"
 	}
-	return fmt.Sprintf("PR #%d%s %s %s", pr.Number, draft, pr.Title, pr.URL)
+	return fmt.Sprintf("PR #%d%s %s %s", p.Number, draft, p.Title, p.URL)
 }
 
-func writeItemLines(w io.Writer, it work.Item, useColor bool) {
-	switch v := it.(type) {
-	case work.ReviewThread:
-		loc := v.Thread.Path
-		if v.Thread.Line > 0 {
-			loc = fmt.Sprintf("%s:%d", loc, v.Thread.Line)
-		}
-		outdated := colorize(useColor, colorDim, boolLabel(v.Thread.IsOutdated, " (outdated)"))
-		fmt.Fprintf(w, "    %s %s%s %s\n", colorize(useColor, colorCyan, "[review-thread]"), loc, outdated, v.Thread.URL)
-		for _, c := range v.Thread.Comments {
-			fmt.Fprintf(w, "        %s: %s\n", c.Author, firstLine(c.Body))
-		}
-	case work.PRCheckFailure:
-		fmt.Fprintf(w, "    %s %s %s %s%s\n",
-			colorize(useColor, colorCyan, "[pr-check-failure]"), v.Check.Name,
-			colorize(useColor, colorRed, v.Check.Conclusion), v.Check.URL, runInfo(v.Check))
-	case work.BranchCheckFailure:
-		fmt.Fprintf(w, "    %s %s %s %s%s\n",
-			colorize(useColor, colorCyan, "[branch-check-failure]"), v.Check.Name,
-			colorize(useColor, colorRed, v.Check.Conclusion), v.Check.URL, runInfo(v.Check))
-	case work.MergeConflict:
-		fmt.Fprintf(w, "    %s conflicts with %s\n", colorize(useColor, colorCyan, "[merge-conflict]"), v.BaseRef)
+// itemLineWriter implements work.PRItemVisitor, printing one PR's items.
+type itemLineWriter struct {
+	w        io.Writer
+	useColor bool
+}
+
+func (l itemLineWriter) VisitReviewThread(t work.ReviewThread) {
+	loc := t.Thread.Path
+	if t.Thread.Line > 0 {
+		loc = fmt.Sprintf("%s:%d", loc, t.Thread.Line)
 	}
+	outdated := colorize(l.useColor, colorDim, boolLabel(t.Thread.IsOutdated, " (outdated)"))
+	fmt.Fprintf(l.w, "    %s %s%s %s\n", colorize(l.useColor, colorCyan, "[review-thread]"), loc, outdated, t.Thread.URL)
+	for _, c := range t.Thread.Comments {
+		fmt.Fprintf(l.w, "        %s: %s\n", c.Author, firstLine(c.Body))
+	}
+}
+
+func (l itemLineWriter) VisitPRCheckFailure(c work.PRCheckFailure) {
+	writeCheckFailureLine(l.w, "pr-check-failure", c.CheckFailure, l.useColor)
+}
+
+func (l itemLineWriter) VisitMergeConflict(m work.MergeConflict) {
+	fmt.Fprintf(l.w, "    %s conflicts with %s\n", colorize(l.useColor, colorCyan, "[merge-conflict]"), m.BaseRef)
+}
+
+func writeCheckFailureLine(w io.Writer, kind string, f work.CheckFailure, useColor bool) {
+	fmt.Fprintf(w, "    %s %s %s %s%s\n",
+		colorize(useColor, colorCyan, "["+kind+"]"), f.Check.Name,
+		colorize(useColor, colorRed, f.Check.Conclusion), f.Check.URL, runInfo(f.Check))
 }
 
 func boolLabel(b bool, label string) string {

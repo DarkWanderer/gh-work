@@ -18,10 +18,17 @@
   then kind, then id — the order is deterministic across runs given the
   same input.
 - `warnings` are non-fatal notices (e.g. GitHub search's 1000-result cap
-  was hit) that don't affect the exit code.
+  was hit) that don't affect the exit code. `review-threads`, `pr-checks`
+  and `merge-conflicts` share one PR search, so the 1000-result-cap warning
+  is now reported once per run, not once per source.
 - `errors` are per-source failures. A failing source does not drop other
   sources' items — its failure is reported here instead, and the process
-  exits 1 (see the "Exit codes" section of the README).
+  exits 1 (see the "Exit codes" section of the README). Because
+  `review-threads`, `pr-checks` and `merge-conflicts` share one PR fetch, a
+  failure in that fetch (the search itself, or paging a PR's overflow
+  threads/checks) is reported once per one of those sources that's
+  selected, all with the same message — not just the one source whose data
+  happened to be mid-fetch.
 
 ## Item shapes
 

@@ -9,10 +9,10 @@ import (
 
 	"github.com/cli/go-gh/v2/pkg/term"
 
+	"github.com/DarkWanderer/gh-work/internal/check"
 	"github.com/DarkWanderer/gh-work/internal/collect"
 	"github.com/DarkWanderer/gh-work/internal/github"
 	"github.com/DarkWanderer/gh-work/internal/render"
-	"github.com/DarkWanderer/gh-work/internal/source"
 	"github.com/DarkWanderer/gh-work/internal/target"
 )
 
@@ -35,16 +35,14 @@ func run(ctx context.Context, opts Options, p runParams, workFound *bool) error 
 		return usageErrorf("%v", err)
 	}
 
-	if len(p.filters) > 0 {
-		if _, ok := tgt.(target.PR); ok {
-			return usageErrorf("--filter cannot be used with a PR target")
-		}
+	if len(p.filters) > 0 && isPRTarget(tgt) {
+		return usageErrorf("--filter cannot be used with a PR target")
 	}
 	if p.watch && p.interval < minWatchInterval {
 		return usageErrorf("--interval must be at least %s", minWatchInterval)
 	}
 
-	srcs, err := selectSources(p.sourceNames)
+	checks, err := selectSources(p.sourceNames)
 	if err != nil {
 		return err
 	}
@@ -57,10 +55,8 @@ func run(ctx context.Context, opts Options, p runParams, workFound *bool) error 
 		}
 	}
 
-	sourceOpts := source.Options{Filters: p.filters}
-
 	if !p.watch {
-		res := collect.Run(ctx, gh, tgt, srcs, sourceOpts)
+		res := collect.Run(ctx, gh, tgt, checks, p.filters)
 		if err := writeEnvelope(opts.Stdout, tgt, res, p.jsonOutput); err != nil {
 			return apiErrorf("writing output: %v", err)
 		}
@@ -73,7 +69,7 @@ func run(ctx context.Context, opts Options, p runParams, workFound *bool) error 
 		return nil
 	}
 
-	return watchLoop(ctx, opts, gh, tgt, srcs, sourceOpts, p, workFound)
+	return watchLoop(ctx, opts, gh, tgt, checks, p, workFound)
 }
 
 func resolveTarget(args []string) (target.Target, error) {
@@ -83,7 +79,22 @@ func resolveTarget(args []string) (target.Target, error) {
 	return target.Parse(args[0])
 }
 
-func watchLoop(ctx context.Context, opts Options, gh github.Client, tgt target.Target, srcs []source.Source, sourceOpts source.Options, p runParams, workFound *bool) error {
+// prTargetVisitor reports whether a Target is a PR, via target.Visitor
+// rather than a type assertion, so the check compiles against every Target
+// variant.
+type prTargetVisitor struct{ isPR bool }
+
+func (*prTargetVisitor) VisitOrg(target.Org) error   { return nil }
+func (*prTargetVisitor) VisitRepo(target.Repo) error { return nil }
+func (v *prTargetVisitor) VisitPR(target.PR) error   { v.isPR = true; return nil }
+
+func isPRTarget(t target.Target) bool {
+	var v prTargetVisitor
+	_ = t.Accept(&v) // prTargetVisitor never returns an error
+	return v.isPR
+}
+
+func watchLoop(ctx context.Context, opts Options, gh github.Client, tgt target.Target, checks check.Set, p runParams, workFound *bool) error {
 	watchCtx := ctx
 	if p.timeout > 0 {
 		var cancel context.CancelFunc
@@ -98,7 +109,7 @@ func watchLoop(ctx context.Context, opts Options, gh github.Client, tgt target.T
 	progress := term.IsTerminal(os.Stderr)
 
 	for {
-		res := collect.Run(watchCtx, gh, tgt, srcs, sourceOpts)
+		res := collect.Run(watchCtx, gh, tgt, checks, p.filters)
 		if len(res.Errors) > 0 {
 			if writeErr := writeEnvelope(opts.Stdout, tgt, res, p.jsonOutput); writeErr != nil {
 				return apiErrorf("writing output: %v", writeErr)
@@ -136,7 +147,7 @@ func writeEmptyOrFail(w io.Writer, tgt target.Target, jsonOutput bool) error {
 }
 
 func writeEnvelope(w io.Writer, tgt target.Target, res collect.Result, jsonOutput bool) error {
-	env := render.NewEnvelope(tgt, res.Items, res.Warnings, renderErrors(res.Errors))
+	env := render.NewEnvelope(tgt, res.Groups, res.Warnings, renderErrors(res.Errors))
 	if jsonOutput {
 		return render.JSON(w, env)
 	}

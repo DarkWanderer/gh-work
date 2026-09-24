@@ -4,58 +4,35 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/DarkWanderer/gh-work/internal/source"
-	"github.com/DarkWanderer/gh-work/internal/source/branchchecks"
-	"github.com/DarkWanderer/gh-work/internal/source/mergeconflicts"
-	"github.com/DarkWanderer/gh-work/internal/source/prchecks"
-	"github.com/DarkWanderer/gh-work/internal/source/reviewthreads"
+	"github.com/DarkWanderer/gh-work/internal/check"
 )
 
-// allSources is the registry of known work sources. Adding a new source
-// (see AGENTS.md) means: a new work.Item variant, a new package under
-// internal/source implementing source.Source, and one line here.
-var allSources = []source.Source{
-	reviewthreads.New(),
-	prchecks.New(),
-	branchchecks.New(),
-	mergeconflicts.New(),
-}
-
+// availableSourceNames lists every check name for --source's help text and
+// the unknown-source error, sorted for a stable, alphabetical display
+// (check.All.Names() is registration order, not display order).
 func availableSourceNames() []string {
-	names := make([]string, len(allSources))
-	for i, s := range allSources {
-		names[i] = s.Name()
-	}
+	names := check.All.Names()
 	sort.Strings(names)
 	return names
 }
 
 // selectSources parses a comma-separated --source value into the matching
-// registered sources, preserving registry order. An empty value selects
-// every registered source.
-func selectSources(csv string) ([]source.Source, error) {
+// checks from check.All, preserving registration order. An empty value
+// selects every registered check. Adding a check (see AGENTS.md) means: a
+// new PRCheck/BranchCheck implementation in internal/check, and one line in
+// check.All — this function needs no changes.
+func selectSources(csv string) (check.Set, error) {
 	if strings.TrimSpace(csv) == "" {
-		return allSources, nil
+		return check.All, nil
 	}
-	wanted := map[string]bool{}
+	var names []string
 	for _, name := range strings.Split(csv, ",") {
-		wanted[strings.TrimSpace(name)] = true
+		names = append(names, strings.TrimSpace(name))
 	}
 
-	var selected []source.Source
-	for _, s := range allSources {
-		if wanted[s.Name()] {
-			selected = append(selected, s)
-			delete(wanted, s.Name())
-		}
-	}
-	if len(wanted) > 0 {
-		unknown := make([]string, 0, len(wanted))
-		for name := range wanted {
-			unknown = append(unknown, name)
-		}
-		sort.Strings(unknown)
-		return nil, usageErrorf("unknown --source %q (available: %s)", strings.Join(unknown, ","), strings.Join(availableSourceNames(), ", "))
+	selected, unknown := check.All.Select(names)
+	if len(unknown) > 0 {
+		return check.Set{}, usageErrorf("unknown --source %q (available: %s)", strings.Join(unknown, ","), strings.Join(availableSourceNames(), ", "))
 	}
 	return selected, nil
 }

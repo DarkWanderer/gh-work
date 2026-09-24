@@ -1,17 +1,24 @@
 // Package work defines the unit of actionable work `gh work` reports on,
-// and the GitHub check conclusions that count as failures. Item is a sealed
-// interface (ReviewThread | PRCheckFailure | BranchCheckFailure |
-// MergeConflict) so that, for example, a check failure can never be
-// constructed without the branch or PR it belongs to.
+// grouped by the PR or branch it belongs to, and the GitHub check
+// conclusions that count as failures.
+//
+// Group is a sealed interface (PullRequest | Branch); PRItem is a sealed
+// interface (ReviewThread | PRCheckFailure | MergeConflict) nested inside a
+// PullRequest group. Both are sealed so that, for example, a check failure
+// can never be constructed without the branch or PR it belongs to, and so
+// that adding a variant is a compile error in every Visitor until it's
+// updated (see GroupVisitor, PRItemVisitor) rather than a silently-ignored
+// switch case.
 package work
 
 import (
-	"encoding/json"
+	"fmt"
 	"time"
 )
 
-// Kind identifies which concrete Item variant a value holds. It is also the
-// "kind" discriminator written into JSON output.
+// Kind identifies which concrete PRItem variant a value holds, or the shape
+// of a branch's check failure. It is also the "kind" discriminator written
+// into JSON output (see internal/render).
 type Kind string
 
 const (
@@ -21,16 +28,9 @@ const (
 	KindMergeConflict      Kind = "merge-conflict"
 )
 
-// PRRef identifies the pull request an item belongs to.
-type PRRef struct {
-	Number  int    `json:"number"`
-	Title   string `json:"title"`
-	URL     string `json:"url"`
-	HeadRef string `json:"headRef"`
-	IsDraft bool   `json:"isDraft"`
-}
-
-// Comment is a single review comment within a thread.
+// Comment is a single review comment within a thread. JSON tags match the
+// --json contract (docs/output.md) directly, since internal/render embeds
+// this value as-is rather than re-shaping it.
 type Comment struct {
 	Author    string    `json:"author"`
 	Body      string    `json:"body"`
@@ -74,131 +74,139 @@ const (
 	StatusStateError   = "ERROR"
 )
 
+var failingCheckRunConclusions = map[string]bool{
+	ConclusionFailure:        true,
+	ConclusionTimedOut:       true,
+	ConclusionStartupFailure: true,
+	ConclusionActionRequired: true,
+}
+
+var failingStatusStates = map[string]bool{
+	StatusStateFailure: true,
+	StatusStateError:   true,
+}
+
 // IsFailingCheckRunConclusion reports whether a CheckRun conclusion counts
 // as work needing attention.
 func IsFailingCheckRunConclusion(conclusion string) bool {
-	switch conclusion {
-	case ConclusionFailure, ConclusionTimedOut, ConclusionStartupFailure, ConclusionActionRequired:
-		return true
-	default:
-		return false
-	}
+	return failingCheckRunConclusions[conclusion]
 }
 
 // IsFailingStatusState reports whether a StatusContext state counts as work
 // needing attention.
 func IsFailingStatusState(state string) bool {
-	switch state {
-	case StatusStateFailure, StatusStateError:
-		return true
-	default:
-		return false
-	}
+	return failingStatusStates[state]
 }
 
-// Item is implemented by ReviewThread, PRCheckFailure, BranchCheckFailure
-// and MergeConflict. The unexported method seals the interface to this
+// CheckFailure is a single failing check together with the commit it ran
+// against. Embedded by PRCheckFailure and held in Branch.Failures.
+type CheckFailure struct {
+	ID     string
+	Commit string
+	Check  Check
+}
+
+// GroupVisitor is implemented by callers that need variant-specific
+// behavior for a Group (e.g. rendering), in place of a type switch.
+type GroupVisitor interface {
+	VisitPullRequest(PullRequest)
+	VisitBranch(Branch)
+}
+
+// Group is implemented by PullRequest and Branch: the two things work items
+// are grouped under. The unexported method seals the interface to this
 // package.
-type Item interface {
+type Group interface {
+	// GroupRepo is the "owner/name" repository the group belongs to.
+	GroupRepo() string
+	// SortKey orders groups within a repo: PR-numbered groups (zero-padded,
+	// so numeric order is preserved) before branch groups, then branches
+	// alphabetically.
+	SortKey() string
+	// Accept dispatches to the matching GroupVisitor method.
+	Accept(v GroupVisitor)
+	sealed()
+}
+
+// PullRequest is an open PR carrying every PRItem found for it (unresolved
+// review threads, failing head-commit checks, a merge conflict).
+type PullRequest struct {
+	ID      string
+	Repo    string
+	Number  int
+	Title   string
+	URL     string
+	HeadRef string
+	IsDraft bool
+	Items   []PRItem
+}
+
+func (p PullRequest) GroupRepo() string     { return p.Repo }
+func (p PullRequest) SortKey() string       { return fmt.Sprintf("0%010d", p.Number) }
+func (p PullRequest) Accept(v GroupVisitor) { v.VisitPullRequest(p) }
+func (PullRequest) sealed()                 {}
+
+// Branch is a repo's default branch carrying every failing check found on
+// its tip commit.
+type Branch struct {
+	Repo     string
+	Name     string
+	Commit   string
+	Failures []CheckFailure
+}
+
+func (b Branch) GroupRepo() string     { return b.Repo }
+func (b Branch) SortKey() string       { return "1" + b.Name }
+func (b Branch) Accept(v GroupVisitor) { v.VisitBranch(b) }
+func (Branch) sealed()                 {}
+
+// PRItemVisitor is implemented by callers that need variant-specific
+// behavior for a PRItem, in place of a type switch.
+type PRItemVisitor interface {
+	VisitReviewThread(ReviewThread)
+	VisitPRCheckFailure(PRCheckFailure)
+	VisitMergeConflict(MergeConflict)
+}
+
+// PRItem is implemented by ReviewThread, PRCheckFailure and MergeConflict:
+// the kinds of work found on a single PR. The unexported method seals the
+// interface to this package.
+type PRItem interface {
 	ItemID() string
 	ItemKind() Kind
-	ItemRepo() string
-	json.Marshaler
+	// Accept dispatches to the matching PRItemVisitor method.
+	Accept(v PRItemVisitor)
 	sealed()
 }
 
 // ReviewThread is an unresolved PR review thread.
 type ReviewThread struct {
 	ID     string
-	Repo   string
-	PR     PRRef
 	Thread Thread
 }
 
-func (r ReviewThread) ItemID() string   { return r.ID }
-func (r ReviewThread) ItemKind() Kind   { return KindReviewThread }
-func (r ReviewThread) ItemRepo() string { return r.Repo }
-func (ReviewThread) sealed()            {}
-
-func (r ReviewThread) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		ID     string `json:"id"`
-		Kind   Kind   `json:"kind"`
-		Repo   string `json:"repo"`
-		PR     PRRef  `json:"pr"`
-		Thread Thread `json:"thread"`
-	}{r.ID, KindReviewThread, r.Repo, r.PR, r.Thread})
-}
+func (r ReviewThread) ItemID() string         { return r.ID }
+func (r ReviewThread) ItemKind() Kind         { return KindReviewThread }
+func (r ReviewThread) Accept(v PRItemVisitor) { v.VisitReviewThread(r) }
+func (ReviewThread) sealed()                  {}
 
 // PRCheckFailure is a failing check on a PR's head commit.
 type PRCheckFailure struct {
-	ID     string
-	Repo   string
-	PR     PRRef
-	Commit string
-	Check  Check
+	CheckFailure
 }
 
-func (c PRCheckFailure) ItemID() string   { return c.ID }
-func (c PRCheckFailure) ItemKind() Kind   { return KindPRCheckFailure }
-func (c PRCheckFailure) ItemRepo() string { return c.Repo }
-func (PRCheckFailure) sealed()            {}
-
-func (c PRCheckFailure) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		ID     string `json:"id"`
-		Kind   Kind   `json:"kind"`
-		Repo   string `json:"repo"`
-		PR     PRRef  `json:"pr"`
-		Commit string `json:"commit"`
-		Check  Check  `json:"check"`
-	}{c.ID, KindPRCheckFailure, c.Repo, c.PR, c.Commit, c.Check})
-}
-
-// BranchCheckFailure is a failing check on a repo's default branch tip.
-type BranchCheckFailure struct {
-	ID     string
-	Repo   string
-	Branch string
-	Commit string
-	Check  Check
-}
-
-func (c BranchCheckFailure) ItemID() string   { return c.ID }
-func (c BranchCheckFailure) ItemKind() Kind   { return KindBranchCheckFailure }
-func (c BranchCheckFailure) ItemRepo() string { return c.Repo }
-func (BranchCheckFailure) sealed()            {}
-
-func (c BranchCheckFailure) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		ID     string `json:"id"`
-		Kind   Kind   `json:"kind"`
-		Repo   string `json:"repo"`
-		Branch string `json:"branch"`
-		Commit string `json:"commit"`
-		Check  Check  `json:"check"`
-	}{c.ID, KindBranchCheckFailure, c.Repo, c.Branch, c.Commit, c.Check})
-}
+func (c PRCheckFailure) ItemID() string         { return c.ID }
+func (c PRCheckFailure) ItemKind() Kind         { return KindPRCheckFailure }
+func (c PRCheckFailure) Accept(v PRItemVisitor) { v.VisitPRCheckFailure(c) }
+func (PRCheckFailure) sealed()                  {}
 
 // MergeConflict is an open PR whose mergeable state is CONFLICTING.
 type MergeConflict struct {
 	ID      string
-	Repo    string
-	PR      PRRef
 	BaseRef string
 }
 
-func (m MergeConflict) ItemID() string   { return m.ID }
-func (m MergeConflict) ItemKind() Kind   { return KindMergeConflict }
-func (m MergeConflict) ItemRepo() string { return m.Repo }
-func (MergeConflict) sealed()            {}
-
-func (m MergeConflict) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		ID      string `json:"id"`
-		Kind    Kind   `json:"kind"`
-		Repo    string `json:"repo"`
-		PR      PRRef  `json:"pr"`
-		BaseRef string `json:"baseRef"`
-	}{m.ID, KindMergeConflict, m.Repo, m.PR, m.BaseRef})
-}
+func (m MergeConflict) ItemID() string         { return m.ID }
+func (m MergeConflict) ItemKind() Kind         { return KindMergeConflict }
+func (m MergeConflict) Accept(v PRItemVisitor) { v.VisitMergeConflict(m) }
+func (MergeConflict) sealed()                  {}

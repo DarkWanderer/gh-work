@@ -1,0 +1,103 @@
+{
+  "search": {
+    "issueCount": 3,
+    "pageInfo": { "hasNextPage": true, "endCursor": "SEARCH_C1" },
+    "nodes": [
+      {
+        "id": "PR_1",
+        "number": 1,
+        "title": "Fix sync bug",
+        "url": "https://github.com/o/r/pull/1",
+        "isDraft": false,
+        "headRefName": "fix-sync",
+        "baseRefName": "main",
+        "mergeable": "MERGEABLE",
+        "repository": { "nameWithOwner": "o/r" },
+        "reviewThreads": {
+          "pageInfo": { "hasNextPage": false, "endCursor": "" },
+          "nodes": [
+            {
+              "id": "PRRT_1",
+              "isResolved": false,
+              "isOutdated": false,
+              "path": "main.go",
+              "line": 14,
+              "comments": {
+                "nodes": [
+                  { "author": { "login": "codex" }, "body": "This looks wrong.", "url": "https://github.com/o/r/pull/1#r1", "createdAt": "2026-01-01T00:00:00Z" }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_2",
+              "isResolved": true,
+              "isOutdated": false,
+              "path": "main.go",
+              "line": 20,
+              "comments": { "nodes": [] }
+            }
+          ]
+        },
+        "commits": {
+          "nodes": [
+            {
+              "commit": {
+                "id": "C_1",
+                "oid": "abc1234",
+                "statusCheckRollup": {
+                  "contexts": {
+                    "pageInfo": { "hasNextPage": true, "endCursor": "CTX_C1" },
+                    "nodes": [
+                      {
+                        "__typename": "CheckRun",
+                        "id": "CR_1",
+                        "name": "build",
+                        "conclusion": "FAILURE",
+                        "databaseId": 100,
+                        "detailsUrl": "https://github.com/o/r/pull/1/checks/1",
+                        "checkSuite": { "workflowRun": { "databaseId": 900, "workflow": { "name": "CI" } } }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "PR_2",
+        "number": 2,
+        "title": "Add widgets",
+        "url": "https://github.com/o/r/pull/2",
+        "isDraft": true,
+        "headRefName": "widgets",
+        "baseRefName": "main",
+        "mergeable": "CONFLICTING",
+        "repository": { "nameWithOwner": "o/r" },
+        "reviewThreads": {
+          "pageInfo": { "hasNextPage": true, "endCursor": "THREADS_C1" },
+          "nodes": [
+            {
+              "id": "PRRT_20",
+              "isResolved": false,
+              "isOutdated": true,
+              "path": "old.go",
+              "line": null,
+              "comments": {
+                "nodes": [
+                  { "author": null, "body": "deleted user comment", "url": "https://github.com/o/r/pull/2#r20", "createdAt": "2026-01-01T01:00:00Z" }
+                ]
+              }
+            }
+          ]
+        },
+        "commits": {
+          "nodes": [
+            { "commit": { "id": "C_2", "oid": "2222222", "statusCheckRollup": null } }
+          ]
+        }
+      }
+    ]
+  }
+}

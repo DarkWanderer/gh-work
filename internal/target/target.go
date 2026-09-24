@@ -1,6 +1,6 @@
 // Package target models the thing `gh work` was asked to inspect: an org
 // (or user), a single repo, or a single PR. Target is a sealed interface so
-// that callers who type-switch on it cannot forget a variant, and so a PR
+// that callers who implement Visitor cannot forget a variant, and so a PR
 // target always carries a number while an org target never does.
 package target
 
@@ -14,32 +14,20 @@ import (
 	"github.com/cli/go-gh/v2/pkg/repository"
 )
 
-// Kind identifies which concrete Target variant a value holds.
-type Kind int
-
-const (
-	KindOrg Kind = iota
-	KindRepo
-	KindPR
-)
-
-func (k Kind) String() string {
-	switch k {
-	case KindOrg:
-		return "org"
-	case KindRepo:
-		return "repo"
-	case KindPR:
-		return "pr"
-	default:
-		return "unknown"
-	}
+// Visitor is implemented by callers that need variant-specific behavior for
+// a Target, in place of a type switch. Adding a Target variant is a compile
+// error in every Visitor until it's updated.
+type Visitor interface {
+	VisitOrg(Org) error
+	VisitRepo(Repo) error
+	VisitPR(PR) error
 }
 
 // Target is implemented by Org, Repo and PR. The unexported method seals the
 // interface: only this package can produce new variants.
 type Target interface {
-	Kind() Kind
+	// Accept dispatches to the matching Visitor method.
+	Accept(v Visitor) error
 	sealed()
 }
 
@@ -48,8 +36,8 @@ type Org struct {
 	Owner string
 }
 
-func (Org) Kind() Kind { return KindOrg }
-func (Org) sealed()    {}
+func (o Org) Accept(v Visitor) error { return v.VisitOrg(o) }
+func (Org) sealed()                  {}
 
 // Repo is a single owner/name repository.
 type Repo struct {
@@ -57,8 +45,8 @@ type Repo struct {
 	Name  string
 }
 
-func (Repo) Kind() Kind { return KindRepo }
-func (Repo) sealed()    {}
+func (r Repo) Accept(v Visitor) error { return v.VisitRepo(r) }
+func (Repo) sealed()                  {}
 
 // String returns the "owner/name" form.
 func (r Repo) String() string { return r.Owner + "/" + r.Name }
@@ -70,8 +58,8 @@ type PR struct {
 	Number int
 }
 
-func (PR) Kind() Kind { return KindPR }
-func (PR) sealed()    {}
+func (p PR) Accept(v Visitor) error { return v.VisitPR(p) }
+func (PR) sealed()                  {}
 
 // RepoString returns the "owner/name" form of the PR's repository.
 func (p PR) RepoString() string { return p.Owner + "/" + p.Name }

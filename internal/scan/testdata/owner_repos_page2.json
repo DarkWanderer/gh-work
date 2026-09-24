@@ -1,0 +1,27 @@
+{
+  "repositoryOwner": {
+    "repositories": {
+      "pageInfo": { "hasNextPage": false, "endCursor": "" },
+      "nodes": [
+        {
+          "nameWithOwner": "o/empty",
+          "isArchived": false,
+          "isFork": false,
+          "defaultBranchRef": null
+        },
+        {
+          "nameWithOwner": "o/nocommits",
+          "isArchived": false,
+          "isFork": false,
+          "defaultBranchRef": { "name": "main", "target": null }
+        },
+        {
+          "nameWithOwner": "o/norollup",
+          "isArchived": false,
+          "isFork": false,
+          "defaultBranchRef": { "name": "main", "target": { "id": "C_nr", "oid": "ccccccc", "statusCheckRollup": null } }
+        }
+      ]
+    }
+  }
+}

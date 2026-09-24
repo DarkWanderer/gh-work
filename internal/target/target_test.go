@@ -103,17 +103,58 @@ func TestParse(t *testing.T) {
 	}
 }
 
-func TestTargetKind(t *testing.T) {
-	if (Org{Owner: "o"}).Kind() != KindOrg {
-		t.Fatal("Org.Kind() != KindOrg")
+// recordingVisitor records which Visit* method was called and on what value.
+type recordingVisitor struct {
+	called string
+	value  Target
+}
+
+func (r *recordingVisitor) VisitOrg(o Org) error   { r.called, r.value = "org", o; return nil }
+func (r *recordingVisitor) VisitRepo(o Repo) error { r.called, r.value = "repo", o; return nil }
+func (r *recordingVisitor) VisitPR(o PR) error     { r.called, r.value = "pr", o; return nil }
+
+func TestTargetAcceptDispatchesToMatchingVisitorMethod(t *testing.T) {
+	org := Org{Owner: "o"}
+	var rv recordingVisitor
+	if err := org.Accept(&rv); err != nil {
+		t.Fatal(err)
 	}
-	if (Repo{Owner: "o", Name: "r"}).Kind() != KindRepo {
-		t.Fatal("Repo.Kind() != KindRepo")
+	if rv.called != "org" || rv.value != Target(org) {
+		t.Fatalf("Org.Accept dispatched to %q with %#v", rv.called, rv.value)
 	}
-	if (PR{Owner: "o", Name: "r", Number: 1}).Kind() != KindPR {
-		t.Fatal("PR.Kind() != KindPR")
+
+	repo := Repo{Owner: "o", Name: "r"}
+	rv = recordingVisitor{}
+	if err := repo.Accept(&rv); err != nil {
+		t.Fatal(err)
+	}
+	if rv.called != "repo" || rv.value != Target(repo) {
+		t.Fatalf("Repo.Accept dispatched to %q with %#v", rv.called, rv.value)
+	}
+
+	pr := PR{Owner: "o", Name: "r", Number: 1}
+	rv = recordingVisitor{}
+	if err := pr.Accept(&rv); err != nil {
+		t.Fatal(err)
+	}
+	if rv.called != "pr" || rv.value != Target(pr) {
+		t.Fatalf("PR.Accept dispatched to %q with %#v", rv.called, rv.value)
 	}
 }
+
+func TestTargetAcceptPropagatesVisitorError(t *testing.T) {
+	wantErr := errors.New("boom")
+	v := erroringVisitor{err: wantErr}
+	if err := (Org{Owner: "o"}).Accept(v); err != wantErr {
+		t.Fatalf("Accept error = %v, want %v", err, wantErr)
+	}
+}
+
+type erroringVisitor struct{ err error }
+
+func (v erroringVisitor) VisitOrg(Org) error   { return v.err }
+func (v erroringVisitor) VisitRepo(Repo) error { return v.err }
+func (v erroringVisitor) VisitPR(PR) error     { return v.err }
 
 func TestRepoString(t *testing.T) {
 	if got := (Repo{Owner: "o", Name: "r"}).String(); got != "o/r" {

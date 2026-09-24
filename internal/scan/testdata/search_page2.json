@@ -1,0 +1,42 @@
+{
+  "search": {
+    "issueCount": 3,
+    "pageInfo": { "hasNextPage": false, "endCursor": "" },
+    "nodes": [
+      {
+        "id": "PR_10",
+        "number": 10,
+        "title": "Docs tweak",
+        "url": "https://github.com/o/r/pull/10",
+        "isDraft": false,
+        "headRefName": "docs",
+        "baseRefName": "main",
+        "mergeable": "UNKNOWN",
+        "repository": { "nameWithOwner": "o/r" },
+        "reviewThreads": {
+          "pageInfo": { "hasNextPage": false, "endCursor": "" },
+          "nodes": []
+        },
+        "commits": {
+          "nodes": [
+            {
+              "commit": {
+                "id": "C_10",
+                "oid": "aaaaaaa",
+                "statusCheckRollup": {
+                  "contexts": {
+                    "pageInfo": { "hasNextPage": false, "endCursor": "" },
+                    "nodes": [
+                      { "__typename": "StatusContext", "id": "SC_10", "context": "ci/legacy", "state": "SUCCESS", "targetUrl": "https://ci.example.com/10" },
+                      { "__typename": "FutureUnionMember", "id": "XX_10" }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

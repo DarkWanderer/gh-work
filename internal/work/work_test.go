@@ -1,129 +1,128 @@
 package work
 
 import (
-	"encoding/json"
+	"reflect"
 	"testing"
-	"time"
 )
 
-func TestReviewThreadMarshalJSON(t *testing.T) {
-	item := ReviewThread{
-		ID:   "PRRT_1",
-		Repo: "o/r",
-		PR:   PRRef{Number: 1, Title: "t", URL: "https://x/1", HeadRef: "feat", IsDraft: false},
-		Thread: Thread{
-			Path: "a.go", Line: 14, IsOutdated: false, URL: "https://x/1#r1",
-			Comments: []Comment{{Author: "bob", Body: "hi", URL: "https://x/1#c1", CreatedAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)}},
-		},
-	}
+// recordingGroupVisitor records which Visit* method was called and with
+// what value, so Accept's dispatch can be asserted without a type switch.
+type recordingGroupVisitor struct {
+	called string
+	pr     PullRequest
+	branch Branch
+}
 
-	b, err := json.Marshal(Item(item))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var got map[string]any
-	if err := json.Unmarshal(b, &got); err != nil {
-		t.Fatal(err)
-	}
-	if got["kind"] != "review-thread" {
-		t.Fatalf("kind = %v", got["kind"])
-	}
-	if got["id"] != "PRRT_1" || got["repo"] != "o/r" {
-		t.Fatalf("id/repo = %v/%v", got["id"], got["repo"])
-	}
-	thread := got["thread"].(map[string]any)
-	if thread["path"] != "a.go" || thread["line"] != float64(14) {
-		t.Fatalf("thread = %v", thread)
+func (r *recordingGroupVisitor) VisitPullRequest(p PullRequest) { r.called, r.pr = "pr", p }
+func (r *recordingGroupVisitor) VisitBranch(b Branch)           { r.called, r.branch = "branch", b }
+
+func TestPullRequestAcceptDispatchesToVisitPullRequest(t *testing.T) {
+	pr := PullRequest{ID: "PR_1", Repo: "o/r", Number: 1}
+	var rv recordingGroupVisitor
+	pr.Accept(&rv)
+	if rv.called != "pr" || !reflect.DeepEqual(rv.pr, pr) {
+		t.Fatalf("Accept dispatched to %q with %#v", rv.called, rv.pr)
 	}
 }
 
-func TestPRCheckFailureMarshalJSON(t *testing.T) {
-	item := PRCheckFailure{
-		ID: "CR_1", Repo: "o/r",
-		PR:     PRRef{Number: 2, Title: "t", URL: "https://x/2", HeadRef: "feat", IsDraft: true},
-		Commit: "deadbeef",
-		Check:  Check{Name: "build", Conclusion: "FAILURE", URL: "https://x/checks/1", Workflow: "CI", RunID: 100, JobID: 200},
-	}
-	b, err := json.Marshal(Item(item))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var got map[string]any
-	if err := json.Unmarshal(b, &got); err != nil {
-		t.Fatal(err)
-	}
-	if got["kind"] != "pr-check-failure" {
-		t.Fatalf("kind = %v", got["kind"])
-	}
-	check := got["check"].(map[string]any)
-	if check["runId"] != float64(100) || check["jobId"] != float64(200) {
-		t.Fatalf("check = %v", check)
+func TestBranchAcceptDispatchesToVisitBranch(t *testing.T) {
+	b := Branch{Repo: "o/r", Name: "main"}
+	var rv recordingGroupVisitor
+	b.Accept(&rv)
+	if rv.called != "branch" || !reflect.DeepEqual(rv.branch, b) {
+		t.Fatalf("Accept dispatched to %q with %#v", rv.called, rv.branch)
 	}
 }
 
-func TestBranchCheckFailureMarshalJSON(t *testing.T) {
-	item := BranchCheckFailure{
-		ID: "SC_1", Repo: "o/r", Branch: "main", Commit: "cafebabe",
-		Check: Check{Name: "ci/status", Conclusion: "ERROR", URL: "https://x/status/1"},
+func TestGroupSortKey(t *testing.T) {
+	cases := []struct {
+		name string
+		g    Group
+		want string
+	}{
+		{"pr 1", PullRequest{Number: 1}, "0" + "0000000001"},
+		{"pr 10", PullRequest{Number: 10}, "0" + "0000000010"},
+		{"branch main", Branch{Name: "main"}, "1main"},
+		{"branch develop", Branch{Name: "develop"}, "1develop"},
 	}
-	b, err := json.Marshal(Item(item))
-	if err != nil {
-		t.Fatal(err)
+	for _, c := range cases {
+		if got := c.g.SortKey(); got != c.want {
+			t.Errorf("%s: SortKey() = %q, want %q", c.name, got, c.want)
+		}
 	}
-	var got map[string]any
-	if err := json.Unmarshal(b, &got); err != nil {
-		t.Fatal(err)
+	// A PR-numbered group must sort before any branch group regardless of
+	// number/name, and PR numbers must compare numerically, not lexically.
+	if !(PullRequest{Number: 2}.SortKey() < Branch{Name: "aaa"}.SortKey()) {
+		t.Fatal("PR groups should sort before branch groups")
 	}
-	if got["kind"] != "branch-check-failure" || got["branch"] != "main" {
-		t.Fatalf("got = %v", got)
-	}
-	check := got["check"].(map[string]any)
-	if _, ok := check["runId"]; ok {
-		t.Fatalf("runId should be omitted for non-Actions checks, got %v", check)
-	}
-}
-
-func TestMergeConflictMarshalJSON(t *testing.T) {
-	item := MergeConflict{
-		ID:      "PR_kwDOA1",
-		Repo:    "o/r",
-		PR:      PRRef{Number: 3, Title: "t", URL: "https://x/3", HeadRef: "feat", IsDraft: false},
-		BaseRef: "main",
-	}
-	b, err := json.Marshal(Item(item))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var got map[string]any
-	if err := json.Unmarshal(b, &got); err != nil {
-		t.Fatal(err)
-	}
-	if got["kind"] != "merge-conflict" {
-		t.Fatalf("kind = %v", got["kind"])
-	}
-	if got["id"] != "PR_kwDOA1" || got["repo"] != "o/r" || got["baseRef"] != "main" {
-		t.Fatalf("got = %v", got)
-	}
-	pr := got["pr"].(map[string]any)
-	if pr["number"] != float64(3) {
-		t.Fatalf("pr = %v", pr)
+	if !(PullRequest{Number: 2}.SortKey() < PullRequest{Number: 10}.SortKey()) {
+		t.Fatal("PR #2 should sort before PR #10")
 	}
 }
 
-func TestItemAccessors(t *testing.T) {
-	items := []Item{
-		ReviewThread{ID: "a", Repo: "o/r"},
-		PRCheckFailure{ID: "b", Repo: "o/r"},
-		BranchCheckFailure{ID: "c", Repo: "o/r"},
-		MergeConflict{ID: "d", Repo: "o/r"},
+func TestGroupRepo(t *testing.T) {
+	if (PullRequest{Repo: "o/r"}).GroupRepo() != "o/r" {
+		t.Fatal("PullRequest.GroupRepo()")
 	}
-	wantKinds := []Kind{KindReviewThread, KindPRCheckFailure, KindBranchCheckFailure, KindMergeConflict}
+	if (Branch{Repo: "o/r"}).GroupRepo() != "o/r" {
+		t.Fatal("Branch.GroupRepo()")
+	}
+}
+
+// recordingPRItemVisitor records which Visit* method was called and with
+// what value.
+type recordingPRItemVisitor struct {
+	called   string
+	thread   ReviewThread
+	check    PRCheckFailure
+	conflict MergeConflict
+}
+
+func (r *recordingPRItemVisitor) VisitReviewThread(t ReviewThread) { r.called, r.thread = "thread", t }
+func (r *recordingPRItemVisitor) VisitPRCheckFailure(c PRCheckFailure) {
+	r.called, r.check = "check", c
+}
+func (r *recordingPRItemVisitor) VisitMergeConflict(m MergeConflict) {
+	r.called, r.conflict = "conflict", m
+}
+
+func TestPRItemAcceptDispatchesToMatchingVisitorMethod(t *testing.T) {
+	thread := ReviewThread{ID: "PRRT_1", Thread: Thread{Path: "a.go"}}
+	var rv recordingPRItemVisitor
+	thread.Accept(&rv)
+	if rv.called != "thread" || !reflect.DeepEqual(rv.thread, thread) {
+		t.Fatalf("ReviewThread.Accept dispatched to %q", rv.called)
+	}
+
+	check := PRCheckFailure{CheckFailure{ID: "CR_1", Commit: "abc", Check: Check{Name: "build"}}}
+	rv = recordingPRItemVisitor{}
+	check.Accept(&rv)
+	if rv.called != "check" || rv.check != check {
+		t.Fatalf("PRCheckFailure.Accept dispatched to %q", rv.called)
+	}
+
+	conflict := MergeConflict{ID: "PR_1", BaseRef: "main"}
+	rv = recordingPRItemVisitor{}
+	conflict.Accept(&rv)
+	if rv.called != "conflict" || rv.conflict != conflict {
+		t.Fatalf("MergeConflict.Accept dispatched to %q", rv.called)
+	}
+}
+
+func TestPRItemAccessors(t *testing.T) {
+	items := []PRItem{
+		ReviewThread{ID: "a"},
+		PRCheckFailure{CheckFailure{ID: "b"}},
+		MergeConflict{ID: "c"},
+	}
+	wantKinds := []Kind{KindReviewThread, KindPRCheckFailure, KindMergeConflict}
+	wantIDs := []string{"a", "b", "c"}
 	for i, it := range items {
 		if it.ItemKind() != wantKinds[i] {
 			t.Errorf("item %d: kind = %v, want %v", i, it.ItemKind(), wantKinds[i])
 		}
-		if it.ItemRepo() != "o/r" {
-			t.Errorf("item %d: repo = %v", i, it.ItemRepo())
+		if it.ItemID() != wantIDs[i] {
+			t.Errorf("item %d: id = %v, want %v", i, it.ItemID(), wantIDs[i])
 		}
 	}
 }

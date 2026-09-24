@@ -6,13 +6,12 @@
         "nodes": [
           {
             "__typename": "CheckRun",
-            "id": "CR_9b",
+            "id": "CR_1b",
             "name": "deploy",
             "conclusion": "ACTION_REQUIRED",
-            "status": "COMPLETED",
-            "databaseId": 901,
-            "detailsUrl": "https://github.com/o/r/pull/9/checks/9b",
-            "checkSuite": { "workflowRun": { "databaseId": 800, "workflow": { "name": "CI" } } }
+            "databaseId": 101,
+            "detailsUrl": "https://github.com/o/r/pull/1/checks/1b",
+            "checkSuite": { "workflowRun": { "databaseId": 901, "workflow": { "name": "CI" } } }
           }
         ]
       }
