@@ -5,6 +5,7 @@
     [36m[review-thread][0m main.go:40[2m (outdated)[0m https://github.com/o/r/pull/1#discussion_r2
         alice: Still applies?
     [36m[pr-check-failure][0m sync [31mFAILURE[0m https://github.com/o/r/pull/1/checks/1 (run 100 job 200)
+    [36m[merge-conflict][0m conflicts with main
   branch main
     [36m[branch-check-failure][0m ci/status [31mERROR[0m https://github.com/o/r/commit/def5678
 [33mwarning: search result count exceeds 1000; some PRs may be missing[0m

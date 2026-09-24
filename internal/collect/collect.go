@@ -96,6 +96,8 @@ func groupKey(it work.Item) string {
 		return fmt.Sprintf("0%010d", v.PR.Number)
 	case work.PRCheckFailure:
 		return fmt.Sprintf("0%010d", v.PR.Number)
+	case work.MergeConflict:
+		return fmt.Sprintf("0%010d", v.PR.Number)
 	case work.BranchCheckFailure:
 		return "1" + v.Branch
 	default:

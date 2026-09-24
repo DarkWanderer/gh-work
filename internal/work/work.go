@@ -1,8 +1,8 @@
 // Package work defines the unit of actionable work `gh work` reports on,
 // and the GitHub check conclusions that count as failures. Item is a sealed
-// interface (ReviewThread | PRCheckFailure | BranchCheckFailure) so that,
-// for example, a check failure can never be constructed without the branch
-// or PR it belongs to.
+// interface (ReviewThread | PRCheckFailure | BranchCheckFailure |
+// MergeConflict) so that, for example, a check failure can never be
+// constructed without the branch or PR it belongs to.
 package work
 
 import (
@@ -18,6 +18,7 @@ const (
 	KindReviewThread       Kind = "review-thread"
 	KindPRCheckFailure     Kind = "pr-check-failure"
 	KindBranchCheckFailure Kind = "branch-check-failure"
+	KindMergeConflict      Kind = "merge-conflict"
 )
 
 // PRRef identifies the pull request an item belongs to.
@@ -95,8 +96,9 @@ func IsFailingStatusState(state string) bool {
 	}
 }
 
-// Item is implemented by ReviewThread, PRCheckFailure and BranchCheckFailure.
-// The unexported method seals the interface to this package.
+// Item is implemented by ReviewThread, PRCheckFailure, BranchCheckFailure
+// and MergeConflict. The unexported method seals the interface to this
+// package.
 type Item interface {
 	ItemID() string
 	ItemKind() Kind
@@ -176,4 +178,27 @@ func (c BranchCheckFailure) MarshalJSON() ([]byte, error) {
 		Commit string `json:"commit"`
 		Check  Check  `json:"check"`
 	}{c.ID, KindBranchCheckFailure, c.Repo, c.Branch, c.Commit, c.Check})
+}
+
+// MergeConflict is an open PR whose mergeable state is CONFLICTING.
+type MergeConflict struct {
+	ID      string
+	Repo    string
+	PR      PRRef
+	BaseRef string
+}
+
+func (m MergeConflict) ItemID() string   { return m.ID }
+func (m MergeConflict) ItemKind() Kind   { return KindMergeConflict }
+func (m MergeConflict) ItemRepo() string { return m.Repo }
+func (MergeConflict) sealed()            {}
+
+func (m MergeConflict) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		ID      string `json:"id"`
+		Kind    Kind   `json:"kind"`
+		Repo    string `json:"repo"`
+		PR      PRRef  `json:"pr"`
+		BaseRef string `json:"baseRef"`
+	}{m.ID, KindMergeConflict, m.Repo, m.PR, m.BaseRef})
 }

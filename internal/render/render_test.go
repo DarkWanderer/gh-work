@@ -35,6 +35,9 @@ func sampleItems() []work.Item {
 			ID: "CR_1", Repo: "o/r", PR: pr1, Commit: "abc1234",
 			Check: work.Check{Name: "sync", Conclusion: "FAILURE", URL: "https://github.com/o/r/pull/1/checks/1", Workflow: "CI", RunID: 100, JobID: 200},
 		},
+		work.MergeConflict{
+			ID: "PR_kwDOA1", Repo: "o/r", PR: pr1, BaseRef: "main",
+		},
 		work.BranchCheckFailure{
 			ID: "SC_1", Repo: "o/r", Branch: "main", Commit: "def5678",
 			Check: work.Check{Name: "ci/status", Conclusion: "ERROR", URL: "https://github.com/o/r/commit/def5678"},

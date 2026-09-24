@@ -20,6 +20,8 @@ func emptySearchFixtures(c *fake.Client, owner string) {
 		[]byte(`{"search":{"issueCount":0,"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[]}}`))
 	c.SetFixture("SearchPRChecks", map[string]any{"q": q, "after": nil},
 		[]byte(`{"search":{"issueCount":0,"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[]}}`))
+	c.SetFixture("SearchMergeConflicts", map[string]any{"q": q, "after": nil},
+		[]byte(`{"search":{"issueCount":0,"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[]}}`))
 	c.SetFixture("OrgRepositories", map[string]any{"login": owner, "after": nil},
 		[]byte(`{"repositoryOwner":{"repositories":{"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[]}}}`))
 }
@@ -29,6 +31,8 @@ func withWorkFixtures(c *fake.Client, owner string) {
 	c.SetFixture("SearchReviewThreads", map[string]any{"q": q, "after": nil},
 		[]byte(`{"search":{"issueCount":0,"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[]}}`))
 	c.SetFixture("SearchPRChecks", map[string]any{"q": q, "after": nil},
+		[]byte(`{"search":{"issueCount":0,"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[]}}`))
+	c.SetFixture("SearchMergeConflicts", map[string]any{"q": q, "after": nil},
 		[]byte(`{"search":{"issueCount":0,"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[]}}`))
 	c.SetFixture("OrgRepositories", map[string]any{"login": owner, "after": nil},
 		[]byte(`{"repositoryOwner":{"repositories":{"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[{
@@ -162,6 +166,8 @@ func TestRunContext_PartialFailureExitsOne(t *testing.T) {
 		[]byte(`{"search":{"issueCount":0,"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[]}}`))
 	c.SetFixture("SearchPRChecks", map[string]any{"q": q, "after": nil},
 		[]byte(`{"search":{"issueCount":0,"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[]}}`))
+	c.SetFixture("SearchMergeConflicts", map[string]any{"q": q, "after": nil},
+		[]byte(`{"search":{"issueCount":0,"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[]}}`))
 	// branch-checks fixture deliberately missing -> that source errors.
 	var stdout, stderr bytes.Buffer
 	code := RunContext(context.Background(), Options{
@@ -181,6 +187,7 @@ func TestRunContext_WatchReturnsOnThirdPoll(t *testing.T) {
 	empty := []byte(`{"search":{"issueCount":0,"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[]}}`)
 	c.SetFixture("SearchReviewThreads", map[string]any{"q": q, "after": nil}, empty)
 	c.SetFixture("SearchPRChecks", map[string]any{"q": q, "after": nil}, empty)
+	c.SetFixture("SearchMergeConflicts", map[string]any{"q": q, "after": nil}, empty)
 
 	var pollCount int32
 	// OrgRepositories fixture is swapped out from an atomic counter so the

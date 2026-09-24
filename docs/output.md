@@ -83,6 +83,26 @@ A failing check on a repo's default branch tip.
 }
 ```
 
+### `merge-conflict`
+
+An open PR whose mergeable state is CONFLICTING.
+
+```json
+{
+  "id": "PR_…",
+  "kind": "merge-conflict",
+  "repo": "owner/repo",
+  "pr": { "number": 1, "title": "…", "url": "…", "headRef": "…", "isDraft": false },
+  "baseRef": "main"
+}
+```
+
+GitHub search has no qualifier for merge conflicts, so this source lists
+open PRs and checks each one's mergeable state itself. A PR GitHub hasn't
+finished computing mergeability for (`UNKNOWN`), or one it hasn't recomputed
+yet after a push, is omitted; it shows up on a later run once GitHub
+resolves it.
+
 ### `check`
 
 `check.conclusion` is the raw GitHub value: for a GitHub Actions CheckRun,

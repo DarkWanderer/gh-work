@@ -80,6 +80,19 @@
       }
     },
     {
+      "id": "PR_kwDOA1",
+      "kind": "merge-conflict",
+      "repo": "o/r",
+      "pr": {
+        "number": 1,
+        "title": "Fix sync bug",
+        "url": "https://github.com/o/r/pull/1",
+        "headRef": "fix-sync",
+        "isDraft": false
+      },
+      "baseRef": "main"
+    },
+    {
       "id": "SC_1",
       "kind": "branch-check-failure",
       "repo": "o/r",

@@ -6,6 +6,7 @@ import (
 
 	"github.com/DarkWanderer/gh-work/internal/source"
 	"github.com/DarkWanderer/gh-work/internal/source/branchchecks"
+	"github.com/DarkWanderer/gh-work/internal/source/mergeconflicts"
 	"github.com/DarkWanderer/gh-work/internal/source/prchecks"
 	"github.com/DarkWanderer/gh-work/internal/source/reviewthreads"
 )
@@ -17,6 +18,7 @@ var allSources = []source.Source{
 	reviewthreads.New(),
 	prchecks.New(),
 	branchchecks.New(),
+	mergeconflicts.New(),
 }
 
 func availableSourceNames() []string {

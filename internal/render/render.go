@@ -153,6 +153,8 @@ func subgroupKeyAndHeader(it work.Item) (key, header string) {
 		return prKey(v.PR), prHeader(v.PR)
 	case work.PRCheckFailure:
 		return prKey(v.PR), prHeader(v.PR)
+	case work.MergeConflict:
+		return prKey(v.PR), prHeader(v.PR)
 	case work.BranchCheckFailure:
 		return "branch:" + v.Branch, "branch " + v.Branch
 	default:
@@ -190,6 +192,8 @@ func writeItemLines(w io.Writer, it work.Item, useColor bool) {
 		fmt.Fprintf(w, "    %s %s %s %s%s\n",
 			colorize(useColor, colorCyan, "[branch-check-failure]"), v.Check.Name,
 			colorize(useColor, colorRed, v.Check.Conclusion), v.Check.URL, runInfo(v.Check))
+	case work.MergeConflict:
+		fmt.Fprintf(w, "    %s conflicts with %s\n", colorize(useColor, colorCyan, "[merge-conflict]"), v.BaseRef)
 	}
 }
 

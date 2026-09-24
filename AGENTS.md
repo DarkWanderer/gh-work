@@ -25,14 +25,15 @@ go build -o gh-work . && ./gh-work owner/repo
 
 - `internal/target` — sealed `Target` (`Org | Repo | PR`) and its parser.
 - `internal/work` — sealed `Item` (`ReviewThread | PRCheckFailure |
-  BranchCheckFailure`), the `Check`/conclusion types, and JSON marshaling.
+  BranchCheckFailure | MergeConflict`), the `Check`/conclusion types, and
+  JSON marshaling.
 - `internal/github` — the `Client` interface (one method: `Query`) over
   go-gh's GraphQL client, plus `Paginate`/`PaginateFrom`.
 - `internal/github/fake` — a test double for `Client` that dispatches
   fixtures by GraphQL operation name + exact variables.
 - `internal/source` — the `Source` plugin interface.
-- `internal/source/{reviewthreads,prchecks,branchchecks}` — one source per
-  package, each owning its own GraphQL queries and fixtures.
+- `internal/source/{reviewthreads,prchecks,branchchecks,mergeconflicts}` —
+  one source per package, each owning its own GraphQL queries and fixtures.
 - `internal/collect` — runs the sources that support a target concurrently,
   merges items/warnings/errors, sorts items deterministically.
 - `internal/render` — the `Envelope` type and its JSON/text renderers.
@@ -61,9 +62,10 @@ go build -o gh-work . && ./gh-work owner/repo
 - `Target` and `Item` are sealed interfaces (unexported marker methods) so
   the type system rules out, e.g., a check failure with no repo, or a PR
   target combined with `--filter`.
-- Sources run concurrently and are independent by design: `review-threads`
-  and `pr-checks` each run their own PR search rather than sharing one, so
-  a source can be changed or reworked without touching its neighbors.
+- Sources run concurrently and are independent by design: `review-threads`,
+  `pr-checks` and `merge-conflicts` each run their own PR search rather than
+  sharing one, so a source can be changed or reworked without touching its
+  neighbors.
 - Item sort order (repo, then PR number or branch, then kind, then id) is
   produced once in `internal/collect`, not by callers — `render` assumes
   its input is already in that order.

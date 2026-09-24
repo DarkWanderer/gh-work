@@ -83,13 +83,41 @@ func TestBranchCheckFailureMarshalJSON(t *testing.T) {
 	}
 }
 
+func TestMergeConflictMarshalJSON(t *testing.T) {
+	item := MergeConflict{
+		ID:      "PR_kwDOA1",
+		Repo:    "o/r",
+		PR:      PRRef{Number: 3, Title: "t", URL: "https://x/3", HeadRef: "feat", IsDraft: false},
+		BaseRef: "main",
+	}
+	b, err := json.Marshal(Item(item))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["kind"] != "merge-conflict" {
+		t.Fatalf("kind = %v", got["kind"])
+	}
+	if got["id"] != "PR_kwDOA1" || got["repo"] != "o/r" || got["baseRef"] != "main" {
+		t.Fatalf("got = %v", got)
+	}
+	pr := got["pr"].(map[string]any)
+	if pr["number"] != float64(3) {
+		t.Fatalf("pr = %v", pr)
+	}
+}
+
 func TestItemAccessors(t *testing.T) {
 	items := []Item{
 		ReviewThread{ID: "a", Repo: "o/r"},
 		PRCheckFailure{ID: "b", Repo: "o/r"},
 		BranchCheckFailure{ID: "c", Repo: "o/r"},
+		MergeConflict{ID: "d", Repo: "o/r"},
 	}
-	wantKinds := []Kind{KindReviewThread, KindPRCheckFailure, KindBranchCheckFailure}
+	wantKinds := []Kind{KindReviewThread, KindPRCheckFailure, KindBranchCheckFailure, KindMergeConflict}
 	for i, it := range items {
 		if it.ItemKind() != wantKinds[i] {
 			t.Errorf("item %d: kind = %v, want %v", i, it.ItemKind(), wantKinds[i])

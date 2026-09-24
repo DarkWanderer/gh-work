@@ -1,0 +1,41 @@
+{
+  "search": {
+    "issueCount": 3,
+    "pageInfo": { "hasNextPage": true, "endCursor": "CURSOR_1" },
+    "nodes": [
+      {
+        "id": "PR_kwDOA1",
+        "number": 1,
+        "title": "Conflicting PR",
+        "url": "https://github.com/o/r/pull/1",
+        "isDraft": false,
+        "headRefName": "feature-1",
+        "baseRefName": "main",
+        "mergeable": "CONFLICTING",
+        "repository": { "nameWithOwner": "o/r" }
+      },
+      {
+        "id": "PR_kwDOA2",
+        "number": 2,
+        "title": "Clean PR",
+        "url": "https://github.com/o/r/pull/2",
+        "isDraft": false,
+        "headRefName": "feature-2",
+        "baseRefName": "main",
+        "mergeable": "MERGEABLE",
+        "repository": { "nameWithOwner": "o/r" }
+      },
+      {
+        "id": "PR_kwDOA3",
+        "number": 3,
+        "title": "Still computing",
+        "url": "https://github.com/o/r/pull/3",
+        "isDraft": false,
+        "headRefName": "feature-3",
+        "baseRefName": "main",
+        "mergeable": "UNKNOWN",
+        "repository": { "nameWithOwner": "o/r" }
+      }
+    ]
+  }
+}

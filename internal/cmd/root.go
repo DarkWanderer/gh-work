@@ -20,11 +20,12 @@ func newRootCmd(opts Options, workFound *bool) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "work [<target>]",
-		Short: "List actionable review-thread and check-failure work for an org, repo, or PR",
+		Short: "List actionable review-thread, check-failure and merge-conflict work for an org, repo, or PR",
 		Long: `gh work lists actionable work for an org, repo or PR:
   - unresolved PR review threads
   - failing checks on PR head commits
   - failing checks on repos' default branches
+  - open PRs with merge conflicts
 
 <target> is an owner, owner/repo, owner/repo#N, or a github.com URL to a
 repo or PR. Omit it to use the repo in the current directory.`,

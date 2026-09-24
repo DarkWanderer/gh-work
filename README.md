@@ -1,7 +1,8 @@
 # gh-work
 
 `gh` CLI extension that lists actionable work — unresolved review threads,
-failing PR checks, failing default-branch checks — for an org, repo, or PR.
+failing PR checks, failing default-branch checks, merge-conflicted PRs — for
+an org, repo, or PR.
 Built for agents: stable JSON, exit codes, blocking `--watch`.
 
 ## Install

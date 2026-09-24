@@ -1,0 +1,19 @@
+{
+  "search": {
+    "issueCount": 3,
+    "pageInfo": { "hasNextPage": false, "endCursor": "" },
+    "nodes": [
+      {
+        "id": "PR_kwDOA4",
+        "number": 4,
+        "title": "Another conflicting PR",
+        "url": "https://github.com/o/r/pull/4",
+        "isDraft": true,
+        "headRefName": "feature-4",
+        "baseRefName": "develop",
+        "mergeable": "CONFLICTING",
+        "repository": { "nameWithOwner": "o/r" }
+      }
+    ]
+  }
+}

@@ -120,6 +120,7 @@ func TestRunSortsItemsDeterministically(t *testing.T) {
 		work.PRCheckFailure{ID: "c2", Repo: "o/r", PR: pr2},
 		work.ReviewThread{ID: "t1a", Repo: "o/r", PR: pr1},
 		work.PRCheckFailure{ID: "c1", Repo: "o/r", PR: pr1},
+		work.MergeConflict{ID: "m1", Repo: "o/r", PR: pr1},
 		work.ReviewThread{ID: "t10", Repo: "o/r", PR: pr10},
 		work.BranchCheckFailure{ID: "a1", Repo: "o/r", Branch: "develop"},
 		work.ReviewThread{ID: "t1z", Repo: "a/first", PR: pr1},
@@ -129,7 +130,7 @@ func TestRunSortsItemsDeterministically(t *testing.T) {
 	}}
 	res := collect.Run(context.Background(), nil, target.Org{Owner: "o"}, []source.Source{src}, source.Options{})
 
-	want := []string{"t1z", "c1", "t1a", "c2", "t10", "a1", "z1"}
+	want := []string{"t1z", "m1", "c1", "t1a", "c2", "t10", "a1", "z1"}
 	got := make([]string, len(res.Items))
 	for i, it := range res.Items {
 		got[i] = it.ItemID()
