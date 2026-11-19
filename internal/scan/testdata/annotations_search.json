@@ -1,0 +1,74 @@
+{
+  "search": {
+    "issueCount": 1,
+    "pageInfo": { "hasNextPage": false, "endCursor": "" },
+    "nodes": [
+      {
+        "id": "PR_5",
+        "number": 5,
+        "title": "Annotated",
+        "url": "https://github.com/o/r/pull/5",
+        "isDraft": false,
+        "headRefName": "annotated",
+        "baseRefName": "main",
+        "repository": { "nameWithOwner": "o/r" },
+        "commits": {
+          "nodes": [
+            {
+              "commit": {
+                "id": "C_5",
+                "oid": "5555555",
+                "statusCheckRollup": {
+                  "contexts": {
+                    "pageInfo": { "hasNextPage": true, "endCursor": "CTX_A1" },
+                    "nodes": [
+                      {
+                        "__typename": "CheckRun",
+                        "id": "CR_5",
+                        "name": "lint",
+                        "conclusion": "SUCCESS",
+                        "databaseId": 500,
+                        "detailsUrl": "https://github.com/o/r/runs/500",
+                        "checkSuite": { "workflowRun": { "databaseId": 950, "workflow": { "name": "CI" } } },
+                        "annotations": {
+                          "pageInfo": { "hasNextPage": true, "endCursor": "ANN_C1" },
+                          "nodes": [
+                            {
+                              "databaseId": 51,
+                              "annotationLevel": "FAILURE",
+                              "path": "main.go",
+                              "location": { "start": { "line": 3 }, "end": { "line": 4 } },
+                              "title": "errcheck",
+                              "message": "unchecked error",
+                              "blobUrl": "https://github.com/o/r/blob/5555555/main.go"
+                            },
+                            {
+                              "databaseId": null,
+                              "annotationLevel": "WARNING",
+                              "path": "util.go",
+                              "location": { "start": { "line": 9 }, "end": { "line": 9 } },
+                              "title": null,
+                              "message": "style",
+                              "blobUrl": "https://github.com/o/r/blob/5555555/util.go"
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "__typename": "StatusContext",
+                        "id": "SC_5",
+                        "context": "ci/legacy",
+                        "state": "SUCCESS",
+                        "targetUrl": "https://ci.example.com/5"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

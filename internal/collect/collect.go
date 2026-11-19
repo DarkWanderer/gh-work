@@ -150,8 +150,8 @@ func sortGroups(groups []work.Group) {
 }
 
 // sortPRItems orders a PR's items by kind (alphabetically: merge-conflict,
-// pr-check-failure, review-thread) then id, matching the order the
-// original flat-item collect.Run produced.
+// pr-annotation, pr-check-failure, review-thread) then id, matching the
+// order the original flat-item collect.Run produced.
 func sortPRItems(items []work.PRItem) {
 	sort.Slice(items, func(i, j int) bool {
 		if items[i].ItemKind() != items[j].ItemKind() {

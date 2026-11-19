@@ -18,7 +18,8 @@ import (
 // registered check, through the fake GraphQL client) over a synthetic org
 // with 1000 open PRs (GitHub search's own result cap) spread across 20
 // repos, each contributing one unresolved review thread, one failing check
-// and a merge conflict — all from the single shared PR scan — plus one
+// (carrying one FAILURE and one WARNING annotation) and a merge conflict —
+// all from the single shared PR scan — plus one
 // failing default-branch check per repo from the branch scan.
 func BenchmarkCollectAndRender(b *testing.B) {
 	const (
@@ -116,6 +117,13 @@ func registerSearchPages(c *fake.Client, owner string, total, pageSize, repoCoun
 											"checkSuite": map[string]any{"workflowRun": map[string]any{
 												"databaseId": n + 1_000_000, "workflow": map[string]any{"name": "CI"},
 											}},
+											"annotations": map[string]any{
+												"pageInfo": map[string]any{"hasNextPage": false, "endCursor": ""},
+												"nodes": []any{
+													benchAnnotation(repo, n, 1, "FAILURE"),
+													benchAnnotation(repo, n, 2, "WARNING"),
+												},
+											},
 										},
 									},
 								},
@@ -133,6 +141,18 @@ func registerSearchPages(c *fake.Client, owner string, total, pageSize, repoCoun
 			},
 		})
 		c.SetFixture("SearchPullRequests", map[string]any{"q": q, "after": after}, resp)
+	}
+}
+
+// benchAnnotation is one CheckRun annotation; the bench gives each check
+// run one FAILURE (reported) and one WARNING (decoded, then filtered out),
+// so both paths through the pr-annotations check are exercised.
+func benchAnnotation(repo string, pr, id int, level string) map[string]any {
+	return map[string]any{
+		"databaseId": pr*10 + id, "annotationLevel": level, "path": "main.go",
+		"location": map[string]any{"start": map[string]any{"line": id}, "end": map[string]any{"line": id}},
+		"title":    "lint", "message": "something is off",
+		"blobUrl": fmt.Sprintf("https://github.com/%s/blob/%07x/main.go", repo, pr),
 	}
 }
 

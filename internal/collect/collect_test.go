@@ -167,10 +167,10 @@ func TestRunPRScanFailureReportsOneErrorPerSelectedPRCheck(t *testing.T) {
 
 	res := collect.Run(context.Background(), c, target.Org{Owner: "o"}, check.All, nil)
 
-	if len(res.Errors) != 3 {
-		t.Fatalf("errors = %#v, want 3 (one per selected PR check)", res.Errors)
+	if len(res.Errors) != 4 {
+		t.Fatalf("errors = %#v, want 4 (one per selected PR check)", res.Errors)
 	}
-	wantSources := map[string]bool{"review-threads": true, "pr-checks": true, "merge-conflicts": true}
+	wantSources := map[string]bool{"review-threads": true, "pr-checks": true, "pr-annotations": true, "merge-conflicts": true}
 	for _, e := range res.Errors {
 		if !wantSources[e.Source] {
 			t.Errorf("unexpected error source %q", e.Source)
@@ -230,7 +230,10 @@ func TestRunPRItemsWithinAGroupSortByKindThenID(t *testing.T) {
 				{"id":"PRRT_1","isResolved":false,"isOutdated":false,"path":"a","line":1,"comments":{"nodes":[]}}
 			]},
 			"commits":{"nodes":[{"commit":{"id":"C_1","oid":"abc","statusCheckRollup":{"contexts":{"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[
-				{"__typename":"CheckRun","id":"CR_1","name":"build","conclusion":"FAILURE","databaseId":1,"detailsUrl":"u","checkSuite":null}
+				{"__typename":"CheckRun","id":"CR_1","name":"build","conclusion":"FAILURE","databaseId":1,"detailsUrl":"u","checkSuite":null,
+				 "annotations":{"pageInfo":{"hasNextPage":false,"endCursor":""},"nodes":[
+					{"databaseId":2,"annotationLevel":"FAILURE","path":"a","location":{"start":{"line":1},"end":{"line":1}},"title":null,"message":"m","blobUrl":"b"}
+				 ]}}
 			]}}}}]}
 		}]}}`))
 
@@ -240,7 +243,7 @@ func TestRunPRItemsWithinAGroupSortByKindThenID(t *testing.T) {
 	for _, it := range pr.Items {
 		ids = append(ids, string(it.ItemKind())+":"+it.ItemID())
 	}
-	want := []string{"merge-conflict:PR_1", "pr-check-failure:CR_1", "review-thread:PRRT_1"}
+	want := []string{"merge-conflict:PR_1", "pr-annotation:CR_1:2", "pr-check-failure:CR_1", "review-thread:PRRT_1"}
 	if len(ids) != len(want) {
 		t.Fatalf("got %v, want %v", ids, want)
 	}

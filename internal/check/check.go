@@ -43,7 +43,7 @@ type Set struct {
 // AGENTS.md) means: a new work.PRItem/CheckFailure-producing type here, and
 // one line in this slice.
 var All = Set{
-	PR:     []PRCheck{ReviewThreads{}, PRChecks{}, MergeConflicts{}},
+	PR:     []PRCheck{ReviewThreads{}, PRChecks{}, PRAnnotations{}, MergeConflicts{}},
 	Branch: []BranchCheck{BranchChecks{}},
 }
 

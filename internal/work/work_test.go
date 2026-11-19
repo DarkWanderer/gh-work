@@ -72,15 +72,19 @@ func TestGroupRepo(t *testing.T) {
 // recordingPRItemVisitor records which Visit* method was called and with
 // what value.
 type recordingPRItemVisitor struct {
-	called   string
-	thread   ReviewThread
-	check    PRCheckFailure
-	conflict MergeConflict
+	called     string
+	thread     ReviewThread
+	check      PRCheckFailure
+	annotation PRAnnotation
+	conflict   MergeConflict
 }
 
 func (r *recordingPRItemVisitor) VisitReviewThread(t ReviewThread) { r.called, r.thread = "thread", t }
 func (r *recordingPRItemVisitor) VisitPRCheckFailure(c PRCheckFailure) {
 	r.called, r.check = "check", c
+}
+func (r *recordingPRItemVisitor) VisitPRAnnotation(a PRAnnotation) {
+	r.called, r.annotation = "annotation", a
 }
 func (r *recordingPRItemVisitor) VisitMergeConflict(m MergeConflict) {
 	r.called, r.conflict = "conflict", m
@@ -101,6 +105,13 @@ func TestPRItemAcceptDispatchesToMatchingVisitorMethod(t *testing.T) {
 		t.Fatalf("PRCheckFailure.Accept dispatched to %q", rv.called)
 	}
 
+	annotation := PRAnnotation{ID: "CR_1:7", Commit: "abc", Check: Check{Name: "lint"}, Annotation: Annotation{Level: "FAILURE", Path: "a.go"}}
+	rv = recordingPRItemVisitor{}
+	annotation.Accept(&rv)
+	if rv.called != "annotation" || rv.annotation != annotation {
+		t.Fatalf("PRAnnotation.Accept dispatched to %q", rv.called)
+	}
+
 	conflict := MergeConflict{ID: "PR_1", BaseRef: "main"}
 	rv = recordingPRItemVisitor{}
 	conflict.Accept(&rv)
@@ -114,9 +125,10 @@ func TestPRItemAccessors(t *testing.T) {
 		ReviewThread{ID: "a"},
 		PRCheckFailure{CheckFailure{ID: "b"}},
 		MergeConflict{ID: "c"},
+		PRAnnotation{ID: "d"},
 	}
-	wantKinds := []Kind{KindReviewThread, KindPRCheckFailure, KindMergeConflict}
-	wantIDs := []string{"a", "b", "c"}
+	wantKinds := []Kind{KindReviewThread, KindPRCheckFailure, KindMergeConflict, KindPRAnnotation}
+	wantIDs := []string{"a", "b", "c", "d"}
 	for i, it := range items {
 		if it.ItemKind() != wantKinds[i] {
 			t.Errorf("item %d: kind = %v, want %v", i, it.ItemKind(), wantKinds[i])
@@ -149,6 +161,17 @@ func TestIsFailingStatusState(t *testing.T) {
 	for _, s := range []string{"SUCCESS", "PENDING", "EXPECTED"} {
 		if IsFailingStatusState(s) {
 			t.Errorf("%s should not be failing", s)
+		}
+	}
+}
+
+func TestIsFailingAnnotationLevel(t *testing.T) {
+	if !IsFailingAnnotationLevel("FAILURE") {
+		t.Fatal("FAILURE should be failing")
+	}
+	for _, l := range []string{"WARNING", "NOTICE", ""} {
+		if IsFailingAnnotationLevel(l) {
+			t.Errorf("%q should not be failing", l)
 		}
 	}
 }

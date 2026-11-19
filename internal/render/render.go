@@ -85,6 +85,16 @@ type v1PRCheckFailure struct {
 	Check  work.Check `json:"check"`
 }
 
+type v1PRAnnotation struct {
+	ID         string          `json:"id"`
+	Kind       work.Kind       `json:"kind"`
+	Repo       string          `json:"repo"`
+	PR         v1PRRef         `json:"pr"`
+	Commit     string          `json:"commit"`
+	Check      work.Check      `json:"check"`
+	Annotation work.Annotation `json:"annotation"`
+}
+
 type v1MergeConflict struct {
 	ID      string    `json:"id"`
 	Kind    work.Kind `json:"kind"`
@@ -138,6 +148,12 @@ func (p prItemBuilder) VisitReviewThread(t work.ReviewThread) {
 func (p prItemBuilder) VisitPRCheckFailure(c work.PRCheckFailure) {
 	p.b.items = append(p.b.items, v1PRCheckFailure{
 		ID: c.ID, Kind: work.KindPRCheckFailure, Repo: p.repo, PR: p.pr, Commit: c.Commit, Check: c.Check,
+	})
+}
+
+func (p prItemBuilder) VisitPRAnnotation(a work.PRAnnotation) {
+	p.b.items = append(p.b.items, v1PRAnnotation{
+		ID: a.ID, Kind: work.KindPRAnnotation, Repo: p.repo, PR: p.pr, Commit: a.Commit, Check: a.Check, Annotation: a.Annotation,
 	})
 }
 
@@ -286,6 +302,20 @@ func (l itemLineWriter) VisitReviewThread(t work.ReviewThread) {
 
 func (l itemLineWriter) VisitPRCheckFailure(c work.PRCheckFailure) {
 	writeCheckFailureLine(l.w, "pr-check-failure", c.CheckFailure, l.useColor)
+}
+
+func (l itemLineWriter) VisitPRAnnotation(a work.PRAnnotation) {
+	loc := fmt.Sprintf("%s:%d", a.Annotation.Path, a.Annotation.StartLine)
+	if a.Annotation.EndLine > a.Annotation.StartLine {
+		loc = fmt.Sprintf("%s-%d", loc, a.Annotation.EndLine)
+	}
+	fmt.Fprintf(l.w, "    %s %s %s %s%s\n",
+		colorize(l.useColor, colorCyan, "[pr-annotation]"), loc, a.Check.Name, a.Check.URL, runInfo(a.Check))
+	msg := firstLine(a.Annotation.Message)
+	if a.Annotation.Title != "" {
+		msg = a.Annotation.Title + ": " + msg
+	}
+	fmt.Fprintf(l.w, "        %s\n", colorize(l.useColor, colorRed, msg))
 }
 
 func (l itemLineWriter) VisitMergeConflict(m work.MergeConflict) {
