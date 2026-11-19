@@ -1,0 +1,18 @@
+{
+  "node": {
+    "annotations": {
+      "pageInfo": { "hasNextPage": false, "endCursor": "" },
+      "nodes": [
+        {
+          "databaseId": 53,
+          "annotationLevel": "NOTICE",
+          "path": "main.go",
+          "location": { "start": { "line": 20 }, "end": { "line": 20 } },
+          "title": null,
+          "message": "fyi",
+          "blobUrl": "https://github.com/o/r/blob/5555555/main.go"
+        }
+      ]
+    }
+  }
+}

@@ -172,3 +172,58 @@ func TestTargetInfoFrom(t *testing.T) {
 		}
 	}
 }
+
+// annotationEnvelope is kept apart from sampleEnvelope so the original
+// goldens stay byte-identical, proving pr-annotation is purely additive to
+// the v1 contract. It covers a single-line and a multi-line annotation, with
+// and without a title, on a check that itself passed.
+func annotationEnvelope() Envelope {
+	lint := work.Check{Name: "lint", Conclusion: "SUCCESS", URL: "https://github.com/o/r/runs/3", Workflow: "CI", RunID: 300, JobID: 400}
+	groups := []work.Group{
+		work.PullRequest{
+			ID: "PR_2", Repo: "o/r", Number: 2, Title: "Add feature",
+			URL: "https://github.com/o/r/pull/2", HeadRef: "feature",
+			Items: []work.PRItem{
+				work.PRAnnotation{
+					ID: "CR_3:11", Commit: "abc1234", Check: lint,
+					Annotation: work.Annotation{
+						Level: "FAILURE", Path: "main.go", StartLine: 7, EndLine: 7, Title: "errcheck",
+						Message: "Error return value is not checked\nmore detail", URL: "https://github.com/o/r/blob/abc1234/main.go",
+					},
+				},
+				work.PRAnnotation{
+					ID: "CR_3:12", Commit: "abc1234", Check: lint,
+					Annotation: work.Annotation{
+						Level: "FAILURE", Path: "util.go", StartLine: 3, EndLine: 9,
+						Message: "Function is too long", URL: "https://github.com/o/r/blob/abc1234/util.go",
+					},
+				},
+			},
+		},
+	}
+	return NewEnvelope(target.Repo{Owner: "o", Name: "r"}, groups, nil, nil)
+}
+
+func TestAnnotationJSONGolden(t *testing.T) {
+	var buf bytes.Buffer
+	if err := JSON(&buf, annotationEnvelope()); err != nil {
+		t.Fatal(err)
+	}
+	goldenCompare(t, "testdata/annotation.json.golden", buf.Bytes())
+}
+
+func TestAnnotationTextGolden(t *testing.T) {
+	var buf bytes.Buffer
+	if err := Text(&buf, annotationEnvelope(), false); err != nil {
+		t.Fatal(err)
+	}
+	goldenCompare(t, "testdata/annotation.txt.golden", buf.Bytes())
+}
+
+func TestAnnotationTextGoldenColor(t *testing.T) {
+	var buf bytes.Buffer
+	if err := Text(&buf, annotationEnvelope(), true); err != nil {
+		t.Fatal(err)
+	}
+	goldenCompare(t, "testdata/annotation.color.txt.golden", buf.Bytes())
+}

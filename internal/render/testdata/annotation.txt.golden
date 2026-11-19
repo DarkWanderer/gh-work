@@ -1,0 +1,6 @@
+o/r
+  PR #2 Add feature https://github.com/o/r/pull/2
+    [pr-annotation] main.go:7 lint https://github.com/o/r/runs/3 (run 300 job 400)
+        errcheck: Error return value is not checked …
+    [pr-annotation] util.go:3-9 lint https://github.com/o/r/runs/3 (run 300 job 400)
+        Function is too long

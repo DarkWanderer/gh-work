@@ -18,22 +18,24 @@
   then kind, then id — the order is deterministic across runs given the
   same input.
 - `warnings` are non-fatal notices (e.g. GitHub search's 1000-result cap
-  was hit) that don't affect the exit code. `review-threads`, `pr-checks`
-  and `merge-conflicts` share one PR search, so the 1000-result-cap warning
-  is now reported once per run, not once per source.
+  was hit) that don't affect the exit code. `review-threads`, `pr-checks`,
+  `pr-annotations` and `merge-conflicts` share one PR search, so the
+  1000-result-cap warning is reported once per run.
 - `errors` are per-source failures. A failing source does not drop other
   sources' items — its failure is reported here instead, and the process
   exits 1 (see the "Exit codes" section of the README). Because
-  `review-threads`, `pr-checks` and `merge-conflicts` share one PR fetch, a
-  failure in that fetch (the search itself, or paging a PR's overflow
-  threads/checks) is reported once per one of those sources that's
+  `review-threads`, `pr-checks`, `pr-annotations` and `merge-conflicts`
+  share one PR fetch, a failure in that fetch (the search itself, or paging
+  a PR's overflow threads/checks/annotations) is reported once per one of
+  those sources that's
   selected, all with the same message — not just the one source whose data
   happened to be mid-fetch.
 
 ## Item shapes
 
-Every item has `id` (a GitHub GraphQL node ID — stable, so agents can dedupe
-across runs), `kind`, and `repo` (`"owner/name"`).
+Every item has `id` (stable, so agents can dedupe across runs — a GitHub
+GraphQL node ID for every kind except `pr-annotation`), `kind`, and `repo`
+(`"owner/name"`).
 
 ### `review-thread`
 
@@ -75,6 +77,42 @@ A failing check on a PR's head commit.
 }
 ```
 
+### `pr-annotation`
+
+A failure-level annotation (e.g. a linter error, a failed test, an Actions
+`::error::`) on a check run of a PR's head commit.
+
+```json
+{
+  "id": "CR_…:123",
+  "kind": "pr-annotation",
+  "repo": "owner/repo",
+  "pr": { "number": 1, "title": "…", "url": "…", "headRef": "…", "isDraft": false },
+  "commit": "sha",
+  "check": { "name": "…", "conclusion": "SUCCESS", "url": "…", "workflow": "CI", "runId": 123, "jobId": 456 },
+  "annotation": {
+    "level": "FAILURE",
+    "path": "src/main.go",
+    "startLine": 14,
+    "endLine": 16,
+    "title": "…",
+    "message": "…",
+    "url": "…"
+  }
+}
+```
+
+Only `FAILURE`-level annotations are reported; `WARNING` and `NOTICE` are
+not. They are reported whatever the check run's own conclusion, so `check`
+may be passing (e.g. a `continue-on-error` lint step) or have an empty
+`conclusion` while the run is still in progress. A failing run's
+annotations therefore appear alongside its `pr-check-failure` item.
+
+Annotations have no GraphQL node ID, so `id` is the check run's node ID and
+the annotation's database ID joined by `:`. `annotation.title` is omitted
+when GitHub has none; `annotation.url` is the file's blob URL at the
+annotated commit.
+
 ### `branch-check-failure`
 
 A failing check on a repo's default branch tip.
@@ -112,10 +150,12 @@ resolves it.
 
 ### `check`
 
-`check.conclusion` is the raw GitHub value: for a GitHub Actions CheckRun,
-one of `FAILURE`, `TIMED_OUT`, `STARTUP_FAILURE`, `ACTION_REQUIRED`; for a
-commit StatusContext (e.g. a legacy CI integration), `FAILURE` or `ERROR`.
-Passing, pending, cancelled, skipped and neutral checks are never reported.
+`check.conclusion` is the raw GitHub value. In `pr-check-failure` and
+`branch-check-failure` it is, for a GitHub Actions CheckRun, one of
+`FAILURE`, `TIMED_OUT`, `STARTUP_FAILURE`, `ACTION_REQUIRED`; for a commit
+StatusContext (e.g. a legacy CI integration), `FAILURE` or `ERROR`. Passing,
+pending, cancelled, skipped and neutral checks are never reported as check
+failures. In `pr-annotation` it can be any CheckRun conclusion, or empty.
 
 `workflow`, `runId` and `jobId` are present only for GitHub Actions checks
 (CheckRun), never for a commit status. `runId` is the Actions run ID (feeds

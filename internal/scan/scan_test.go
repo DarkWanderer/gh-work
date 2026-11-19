@@ -3,6 +3,7 @@ package scan
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -401,5 +402,113 @@ func TestFieldsHas(t *testing.T) {
 	}
 	if f.Has(ReviewThreads | HeadRollup) {
 		t.Fatal("Has should report false when any requested field is missing")
+	}
+}
+
+func TestBuildQueriesAnnotationsOnlyWhenRequested(t *testing.T) {
+	const annotations = "annotations(first: 50)"
+	cases := []struct {
+		name  string
+		query string
+		want  bool
+	}{
+		{"search, HeadRollup", buildSearchQuery(HeadRollup), false},
+		{"search, HeadAnnotations", buildSearchQuery(HeadAnnotations), true},
+		{"PR, HeadAnnotations", buildPRQuery(HeadAnnotations), true},
+		{"contexts page, plain", buildContextsPageQuery(false), false},
+		{"contexts page, annotations", buildContextsPageQuery(true), true},
+		{"owner repos", ownerReposQuery, false},
+		{"repo default branch", repoDefaultBranchQuery, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := strings.Contains(c.query, annotations); got != c.want {
+				t.Fatalf("contains %q = %v, want %v:\n%s", annotations, got, c.want, c.query)
+			}
+		})
+	}
+	// HeadAnnotations alone must still fetch the rollup it hangs off.
+	if q := buildSearchQuery(HeadAnnotations); !strings.Contains(q, "statusCheckRollup") {
+		t.Fatalf("HeadAnnotations query missing the rollup:\n%s", q)
+	}
+}
+
+func TestPullRequestsAnnotationsDecodedAndPaginated(t *testing.T) {
+	c := fake.NewClient()
+	must := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	must(c.SetFixtureFile("SearchPullRequests", map[string]any{"q": "is:pr is:open archived:false repo:o/r", "after": nil}, "testdata/annotations_search.json"))
+	must(c.SetFixtureFile("CheckRunAnnotationsPage", map[string]any{"id": "CR_5", "after": "ANN_C1"}, "testdata/annotations_overflow.json"))
+	must(c.SetFixtureFile("CommitCheckContextsPage", map[string]any{"id": "C_5", "after": "CTX_A1"}, "testdata/annotations_contexts_overflow.json"))
+
+	var prs []PullRequest
+	if _, err := PullRequests(context.Background(), c, target.Repo{Owner: "o", Name: "r"}, HeadAnnotations, nil, func(pr PullRequest) { prs = append(prs, pr) }); err != nil {
+		t.Fatal(err)
+	}
+	if len(prs) != 1 || prs[0].Head == nil || len(prs[0].Head.Contexts) != 3 {
+		t.Fatalf("want 1 PR with 3 contexts (2 first page + 1 overflow), got %#v", prs)
+	}
+	ctxs := prs[0].Head.Contexts
+
+	lint := ctxs[0].Annotations()
+	wantLint := []Annotation{
+		{DatabaseID: 51, Level: "FAILURE", Path: "main.go", StartLine: 3, EndLine: 4, Title: "errcheck", Message: "unchecked error", URL: "https://github.com/o/r/blob/5555555/main.go"},
+		{DatabaseID: 0, Level: "WARNING", Path: "util.go", StartLine: 9, EndLine: 9, Message: "style", URL: "https://github.com/o/r/blob/5555555/util.go"},
+		{DatabaseID: 53, Level: "NOTICE", Path: "main.go", StartLine: 20, EndLine: 20, Message: "fyi", URL: "https://github.com/o/r/blob/5555555/main.go"},
+	}
+	if !reflect.DeepEqual(lint, wantLint) {
+		t.Fatalf("lint annotations (first page + overflow, null databaseId/title zeroed) =\n%#v\nwant\n%#v", lint, wantLint)
+	}
+	if got := ctxs[1].Annotations(); got != nil {
+		t.Fatalf("StatusContext annotations = %#v, want nil", got)
+	}
+	if got := ctxs[2].Annotations(); len(got) != 1 || got[0].DatabaseID != 54 {
+		t.Fatalf("overflow context annotations = %#v, want the one from its own page", got)
+	}
+}
+
+func TestPullRequestsAnnotationsNilWithoutHeadAnnotations(t *testing.T) {
+	c := fake.NewClient()
+	// The fixture carries annotations, but a HeadRollup-only scan must not
+	// follow their overflow cursor (no CheckRunAnnotationsPage fixture is
+	// registered, so following it would fail).
+	if err := c.SetFixtureFile("SearchPullRequests", map[string]any{"q": "is:pr is:open archived:false repo:o/r", "after": nil}, "testdata/annotations_search.json"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SetFixtureFile("CommitCheckContextsPage", map[string]any{"id": "C_5", "after": "CTX_A1"}, "testdata/contexts_overflow.json"); err != nil {
+		t.Fatal(err)
+	}
+	var prs []PullRequest
+	_, err := PullRequests(context.Background(), c, target.Repo{Owner: "o", Name: "r"}, HeadRollup, nil, func(pr PullRequest) { prs = append(prs, pr) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, call := range c.Calls {
+		if call.Operation == "CheckRunAnnotationsPage" {
+			t.Fatalf("HeadRollup-only scan paged annotations: %#v", c.Calls)
+		}
+	}
+	if got := prs[0].Head.Contexts[0].Annotations(); got != nil {
+		t.Fatalf("annotations = %#v, want nil when HeadAnnotations wasn't requested", got)
+	}
+}
+
+func TestPullRequestsAnnotationsOverflowErrorPropagates(t *testing.T) {
+	c := fake.NewClient()
+	if err := c.SetFixtureFile("SearchPullRequests", map[string]any{"q": "is:pr is:open archived:false repo:o/r", "after": nil}, "testdata/annotations_search.json"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SetFixtureFile("CommitCheckContextsPage", map[string]any{"id": "C_5", "after": "CTX_A1"}, "testdata/annotations_contexts_overflow.json"); err != nil {
+		t.Fatal(err)
+	}
+	want := errors.New("boom")
+	c.SetFixtureError("CheckRunAnnotationsPage", map[string]any{"id": "CR_5", "after": "ANN_C1"}, want)
+	_, err := PullRequests(context.Background(), c, target.Repo{Owner: "o", Name: "r"}, HeadAnnotations, nil, func(PullRequest) {})
+	if !errors.Is(err, want) {
+		t.Fatalf("err = %v, want %v", err, want)
 	}
 }

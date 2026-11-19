@@ -1,0 +1,34 @@
+{
+  "node": {
+    "statusCheckRollup": {
+      "contexts": {
+        "pageInfo": { "hasNextPage": false, "endCursor": "" },
+        "nodes": [
+          {
+            "__typename": "CheckRun",
+            "id": "CR_5b",
+            "name": "test",
+            "conclusion": "FAILURE",
+            "databaseId": 501,
+            "detailsUrl": "https://github.com/o/r/runs/501",
+            "checkSuite": { "workflowRun": { "databaseId": 950, "workflow": { "name": "CI" } } },
+            "annotations": {
+              "pageInfo": { "hasNextPage": false, "endCursor": "" },
+              "nodes": [
+                {
+                  "databaseId": 54,
+                  "annotationLevel": "FAILURE",
+                  "path": "main_test.go",
+                  "location": { "start": { "line": 12 }, "end": { "line": 12 } },
+                  "title": "TestX",
+                  "message": "expected 1, got 2",
+                  "blobUrl": "https://github.com/o/r/blob/5555555/main_test.go"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

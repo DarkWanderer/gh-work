@@ -25,6 +25,10 @@ const (
 	ReviewThreads Fields = 1 << iota
 	HeadRollup
 	Mergeable
+	// HeadAnnotations fetches the head commit's rollup (as HeadRollup does)
+	// plus every CheckRun's annotations. It implies HeadRollup's data, so a
+	// check needing only annotations doesn't have to name both.
+	HeadAnnotations
 )
 
 // Has reports whether f includes every field in x.
@@ -38,6 +42,22 @@ type CheckContext interface {
 	ID() string
 	Failing() bool
 	Check() work.Check
+	// Annotations is nil unless the scan requested HeadAnnotations, and
+	// always nil for a commit status.
+	Annotations() []Annotation
+}
+
+// Annotation is a single CheckRun annotation, at any level — it's left to a
+// check to decide which levels count as work.
+type Annotation struct {
+	DatabaseID int64  // 0 if GitHub returned none
+	Level      string // raw GitHub enum: FAILURE, WARNING, NOTICE
+	Path       string
+	StartLine  int
+	EndLine    int
+	Title      string
+	Message    string
+	URL        string // blob URL of Path at the annotated commit
 }
 
 // Commit is a commit's check-context rollup, with any overflow pages beyond
@@ -61,8 +81,8 @@ type ReviewThread struct {
 
 // PullRequest is one open PR. Fields outside the requested Fields groups are
 // left zero: ReviewThreads is nil unless ReviewThreads was requested, Head
-// is nil unless HeadRollup was requested, Mergeable is "" unless Mergeable
-// was requested.
+// is nil unless HeadRollup or HeadAnnotations was requested, Mergeable is
+// "" unless Mergeable was requested.
 type PullRequest struct {
 	ID            string
 	Repo          string
@@ -132,7 +152,7 @@ func (s *prScanner) VisitPR(p target.PR) error {
 	if resp.Repository.PullRequest == nil {
 		return fmt.Errorf("%s#%d not found", p.RepoString(), p.Number)
 	}
-	pr, err := pullRequestFromRaw(s.ctx, s.gh, p.RepoString(), *resp.Repository.PullRequest)
+	pr, err := pullRequestFromRaw(s.ctx, s.gh, p.RepoString(), *resp.Repository.PullRequest, s.fields.Has(HeadAnnotations))
 	if err != nil {
 		return err
 	}
@@ -159,7 +179,7 @@ func (s *prScanner) search(scope string) error {
 			if n.Repository != nil {
 				repo = n.Repository.NameWithOwner
 			}
-			pr, err := pullRequestFromRaw(ctx, s.gh, repo, n)
+			pr, err := pullRequestFromRaw(ctx, s.gh, repo, n, s.fields.Has(HeadAnnotations))
 			if err != nil {
 				return github.PageInfo{}, err
 			}

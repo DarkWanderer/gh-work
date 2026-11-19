@@ -11,18 +11,20 @@ import (
 // fakeContext is a scan.CheckContext test double, so check tests never
 // depend on scan's unexported checkRun/statusContext types.
 type fakeContext struct {
-	id      string
-	failing bool
-	check   work.Check
+	id          string
+	failing     bool
+	check       work.Check
+	annotations []scan.Annotation
 }
 
-func (f fakeContext) ID() string        { return f.id }
-func (f fakeContext) Failing() bool     { return f.failing }
-func (f fakeContext) Check() work.Check { return f.check }
+func (f fakeContext) ID() string                     { return f.id }
+func (f fakeContext) Failing() bool                  { return f.failing }
+func (f fakeContext) Check() work.Check              { return f.check }
+func (f fakeContext) Annotations() []scan.Annotation { return f.annotations }
 
 func TestSetNames(t *testing.T) {
 	got := All.Names()
-	want := []string{"review-threads", "pr-checks", "merge-conflicts", "branch-checks"}
+	want := []string{"review-threads", "pr-checks", "pr-annotations", "merge-conflicts", "branch-checks"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Names() = %v, want %v", got, want)
 	}

@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "target": {
+    "kind": "repo",
+    "owner": "o",
+    "repo": "r"
+  },
+  "items": [
+    {
+      "id": "CR_3:11",
+      "kind": "pr-annotation",
+      "repo": "o/r",
+      "pr": {
+        "number": 2,
+        "title": "Add feature",
+        "url": "https://github.com/o/r/pull/2",
+        "headRef": "feature",
+        "isDraft": false
+      },
+      "commit": "abc1234",
+      "check": {
+        "name": "lint",
+        "conclusion": "SUCCESS",
+        "url": "https://github.com/o/r/runs/3",
+        "workflow": "CI",
+        "runId": 300,
+        "jobId": 400
+      },
+      "annotation": {
+        "level": "FAILURE",
+        "path": "main.go",
+        "startLine": 7,
+        "endLine": 7,
+        "title": "errcheck",
+        "message": "Error return value is not checked\nmore detail",
+        "url": "https://github.com/o/r/blob/abc1234/main.go"
+      }
+    },
+    {
+      "id": "CR_3:12",
+      "kind": "pr-annotation",
+      "repo": "o/r",
+      "pr": {
+        "number": 2,
+        "title": "Add feature",
+        "url": "https://github.com/o/r/pull/2",
+        "headRef": "feature",
+        "isDraft": false
+      },
+      "commit": "abc1234",
+      "check": {
+        "name": "lint",
+        "conclusion": "SUCCESS",
+        "url": "https://github.com/o/r/runs/3",
+        "workflow": "CI",
+        "runId": 300,
+        "jobId": 400
+      },
+      "annotation": {
+        "level": "FAILURE",
+        "path": "util.go",
+        "startLine": 3,
+        "endLine": 9,
+        "message": "Function is too long",
+        "url": "https://github.com/o/r/blob/abc1234/util.go"
+      }
+    }
+  ],
+  "warnings": [],
+  "errors": []
+}

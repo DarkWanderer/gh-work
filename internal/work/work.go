@@ -3,12 +3,12 @@
 // conclusions that count as failures.
 //
 // Group is a sealed interface (PullRequest | Branch); PRItem is a sealed
-// interface (ReviewThread | PRCheckFailure | MergeConflict) nested inside a
-// PullRequest group. Both are sealed so that, for example, a check failure
-// can never be constructed without the branch or PR it belongs to, and so
-// that adding a variant is a compile error in every Visitor until it's
-// updated (see GroupVisitor, PRItemVisitor) rather than a silently-ignored
-// switch case.
+// interface (ReviewThread | PRCheckFailure | PRAnnotation | MergeConflict)
+// nested inside a PullRequest group. Both are sealed so that, for example, a
+// check failure can never be constructed without the branch or PR it belongs
+// to, and so that adding a variant is a compile error in every Visitor until
+// it's updated (see GroupVisitor, PRItemVisitor) rather than a
+// silently-ignored switch case.
 package work
 
 import (
@@ -24,6 +24,7 @@ type Kind string
 const (
 	KindReviewThread       Kind = "review-thread"
 	KindPRCheckFailure     Kind = "pr-check-failure"
+	KindPRAnnotation       Kind = "pr-annotation"
 	KindBranchCheckFailure Kind = "branch-check-failure"
 	KindMergeConflict      Kind = "merge-conflict"
 )
@@ -56,6 +57,30 @@ type Check struct {
 	Workflow   string `json:"workflow,omitempty"`
 	RunID      int64  `json:"runId,omitempty"`
 	JobID      int64  `json:"jobId,omitempty"`
+}
+
+// Annotation is a single CheckRun annotation (a linter/test-reporter
+// message pinned to a file and line range). JSON tags match the --json
+// contract (docs/output.md) directly, like Thread.
+type Annotation struct {
+	Level     string `json:"level"`
+	Path      string `json:"path"`
+	StartLine int    `json:"startLine"`
+	EndLine   int    `json:"endLine"`
+	Title     string `json:"title,omitempty"`
+	Message   string `json:"message"`
+	URL       string `json:"url"`
+}
+
+// AnnotationLevelFailure is the only CheckAnnotationLevel that counts as
+// work: WARNING and NOTICE are advisory, and would bury real failures in an
+// agent's work list.
+const AnnotationLevelFailure = "FAILURE"
+
+// IsFailingAnnotationLevel reports whether a CheckRun annotation level
+// counts as work needing attention.
+func IsFailingAnnotationLevel(level string) bool {
+	return level == AnnotationLevelFailure
 }
 
 // CheckRun conclusions that count as a failure. CANCELLED, NEUTRAL, SKIPPED,
@@ -165,12 +190,13 @@ func (Branch) sealed()                 {}
 type PRItemVisitor interface {
 	VisitReviewThread(ReviewThread)
 	VisitPRCheckFailure(PRCheckFailure)
+	VisitPRAnnotation(PRAnnotation)
 	VisitMergeConflict(MergeConflict)
 }
 
-// PRItem is implemented by ReviewThread, PRCheckFailure and MergeConflict:
-// the kinds of work found on a single PR. The unexported method seals the
-// interface to this package.
+// PRItem is implemented by ReviewThread, PRCheckFailure, PRAnnotation and
+// MergeConflict: the kinds of work found on a single PR. The unexported
+// method seals the interface to this package.
 type PRItem interface {
 	ItemID() string
 	ItemKind() Kind
@@ -199,6 +225,21 @@ func (c PRCheckFailure) ItemID() string         { return c.ID }
 func (c PRCheckFailure) ItemKind() Kind         { return KindPRCheckFailure }
 func (c PRCheckFailure) Accept(v PRItemVisitor) { v.VisitPRCheckFailure(c) }
 func (PRCheckFailure) sealed()                  {}
+
+// PRAnnotation is a failure-level annotation on a CheckRun of a PR's head
+// commit. Check is the run that emitted it, whatever that run's conclusion:
+// a run can pass (e.g. continue-on-error) while still reporting errors.
+type PRAnnotation struct {
+	ID         string
+	Commit     string
+	Check      Check
+	Annotation Annotation
+}
+
+func (a PRAnnotation) ItemID() string         { return a.ID }
+func (a PRAnnotation) ItemKind() Kind         { return KindPRAnnotation }
+func (a PRAnnotation) Accept(v PRItemVisitor) { v.VisitPRAnnotation(a) }
+func (PRAnnotation) sealed()                  {}
 
 // MergeConflict is an open PR whose mergeable state is CONFLICTING.
 type MergeConflict struct {

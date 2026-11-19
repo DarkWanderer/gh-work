@@ -8,11 +8,36 @@ import (
 	"github.com/DarkWanderer/gh-work/internal/work"
 )
 
+// annotationsSelection is a CheckAnnotationConnection's selection, shared
+// by the inline first page (checkContextsFragment) and annotationsPageQuery.
+// CheckAnnotation has no node ID, so databaseId is what item IDs are built
+// from (see internal/check.PRAnnotations).
+const annotationsSelection = `pageInfo { hasNextPage endCursor }
+                nodes {
+                  databaseId
+                  annotationLevel
+                  path
+                  location { start { line } end { line } }
+                  title
+                  message
+                  blobUrl
+                }`
+
 // checkContextsFragment is shared by every query that reads a commit's
 // check rollup (PR head commit, branch tip commit, and the overflow page
 // query for either): CheckRun and StatusContext are GitHub's only two
-// StatusCheckRollupContext union members.
-const checkContextsFragment = `pageInfo { hasNextPage endCursor }
+// StatusCheckRollupContext union members. withAnnotations splices in each
+// CheckRun's first page of annotations — only PR head commits ever ask for
+// them, since it is by far the most expensive part of the rollup.
+func checkContextsFragment(withAnnotations bool) string {
+	annotations := ""
+	if withAnnotations {
+		annotations = `
+              annotations(first: 50) {
+                ` + annotationsSelection + `
+              }`
+	}
+	return `pageInfo { hasNextPage endCursor }
           nodes {
             __typename
             ... on CheckRun {
@@ -26,7 +51,7 @@ const checkContextsFragment = `pageInfo { hasNextPage endCursor }
                   databaseId
                   workflow { name }
                 }
-              }
+              }` + annotations + `
             }
             ... on StatusContext {
               id
@@ -35,6 +60,7 @@ const checkContextsFragment = `pageInfo { hasNextPage endCursor }
               targetUrl
             }
           }`
+}
 
 // reviewThreadsFragment fetches a PR's first page of review threads;
 // resolution is decided by a check, not filtered here.
@@ -52,26 +78,31 @@ const reviewThreadsFragment = `reviewThreads(first: 30) {
           }
         }`
 
-// headRollupFragment fetches a PR's head commit and its check rollup.
+// headRollupFragment fetches a PR's head commit and its check rollup, with
+// each CheckRun's annotations if withAnnotations.
 //
 // GitHub GraphQL rejects a query whose worst-case node count (summed across
 // every nesting level, not just the leaf product) exceeds 500,000. With
 // both this and reviewThreadsFragment spliced into a 50-wide search page,
 // the worst case is roughly 50 + 50*30 + 50*30*10 + 50*1 + 50*1*100 =
-// 21,600 nodes — comfortably under the cap.
-const headRollupFragment = `commits(last: 1) {
+// 21,600 nodes, plus 50*1*100*50 = 250,000 more with annotations — 271,600
+// in all, still under the cap. The annotations level dominates the query's
+// rate-limit cost too, which is why it is its own Fields bit.
+func headRollupFragment(withAnnotations bool) string {
+	return `commits(last: 1) {
           nodes {
             commit {
               id
               oid
               statusCheckRollup {
                 contexts(first: 100) {
-                  ` + checkContextsFragment + `
+                  ` + checkContextsFragment(withAnnotations) + `
                 }
               }
             }
           }
         }`
+}
 
 // prBaseSelection is always fetched for a PR; mergeable/reviewThreads/
 // commits are spliced in only when fields asks for them, so a scan that
@@ -90,8 +121,8 @@ func prBaseSelection(fields Fields) string {
 	if fields.Has(ReviewThreads) {
 		sel += "\n        " + reviewThreadsFragment
 	}
-	if fields.Has(HeadRollup) {
-		sel += "\n        " + headRollupFragment
+	if fields.Has(HeadRollup) || fields.Has(HeadAnnotations) {
+		sel += "\n        " + headRollupFragment(fields.Has(HeadAnnotations))
 	}
 	return sel
 }
@@ -144,15 +175,31 @@ const threadsPageQuery = `query PullRequestReviewThreadsPage($id: ID!, $after: S
   }
 }`
 
-// contextsPageQuery re-fetches a commit's check contexts past the first
-// page, via its node ID — shared by PR head commits and branch tip commits.
-const contextsPageQuery = `query CommitCheckContextsPage($id: ID!, $after: String) {
+// buildContextsPageQuery re-fetches a commit's check contexts past the
+// first page, via its node ID — shared by PR head commits and branch tip
+// commits. withAnnotations must match the query that fetched the first
+// page, so overflow contexts carry the same fields as the rest.
+func buildContextsPageQuery(withAnnotations bool) string {
+	return `query CommitCheckContextsPage($id: ID!, $after: String) {
   node(id: $id) {
     ... on Commit {
       statusCheckRollup {
         contexts(first: 100, after: $after) {
-          ` + checkContextsFragment + `
+          ` + checkContextsFragment(withAnnotations) + `
         }
+      }
+    }
+  }
+}`
+}
+
+// annotationsPageQuery re-fetches a CheckRun's annotations past the first
+// page, via its node ID.
+const annotationsPageQuery = `query CheckRunAnnotationsPage($id: ID!, $after: String) {
+  node(id: $id) {
+    ... on CheckRun {
+      annotations(first: 50, after: $after) {
+        ` + annotationsSelection + `
       }
     }
   }
@@ -163,7 +210,7 @@ const contextsPageQuery = `query CommitCheckContextsPage($id: ID!, $after: Strin
 // are re-checked client-side rather than passed as connection arguments,
 // since those filter args are not reliably present on the RepositoryOwner
 // interface across both Organization and User.
-const ownerReposQuery = `query OwnerRepositories($login: String!, $after: String) {
+var ownerReposQuery = `query OwnerRepositories($login: String!, $after: String) {
   repositoryOwner(login: $login) {
     repositories(first: 50, after: $after) {
       pageInfo { hasNextPage endCursor }
@@ -179,7 +226,7 @@ const ownerReposQuery = `query OwnerRepositories($login: String!, $after: String
               oid
               statusCheckRollup {
                 contexts(first: 100) {
-                  ` + checkContextsFragment + `
+                  ` + checkContextsFragment(false) + `
                 }
               }
             }
@@ -190,7 +237,7 @@ const ownerReposQuery = `query OwnerRepositories($login: String!, $after: String
   }
 }`
 
-const repoDefaultBranchQuery = `query RepositoryDefaultBranch($owner: String!, $name: String!) {
+var repoDefaultBranchQuery = `query RepositoryDefaultBranch($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
     nameWithOwner
     isArchived
@@ -203,7 +250,7 @@ const repoDefaultBranchQuery = `query RepositoryDefaultBranch($owner: String!, $
           oid
           statusCheckRollup {
             contexts(first: 100) {
-              ` + checkContextsFragment + `
+              ` + checkContextsFragment(false) + `
             }
           }
         }
@@ -231,9 +278,33 @@ type rawCheckContextNode struct {
 		} `json:"workflowRun"`
 	} `json:"checkSuite"`
 
+	Annotations *rawAnnotationsConnection `json:"annotations"`
+
 	Context   string `json:"context"`
 	State     string `json:"state"`
 	TargetURL string `json:"targetUrl"`
+}
+
+type rawAnnotationNode struct {
+	DatabaseID      *int64 `json:"databaseId"`
+	AnnotationLevel string `json:"annotationLevel"`
+	Path            string `json:"path"`
+	Location        struct {
+		Start struct {
+			Line int `json:"line"`
+		} `json:"start"`
+		End struct {
+			Line int `json:"line"`
+		} `json:"end"`
+	} `json:"location"`
+	Title   *string `json:"title"`
+	Message string  `json:"message"`
+	BlobURL string  `json:"blobUrl"`
+}
+
+type rawAnnotationsConnection struct {
+	PageInfo github.PageInfo     `json:"pageInfo"`
+	Nodes    []rawAnnotationNode `json:"nodes"`
 }
 
 // checkRun and statusContext are CheckContext's two implementations,
@@ -241,10 +312,12 @@ type rawCheckContextNode struct {
 type checkRun struct {
 	id, name, conclusion, detailsURL, workflow string
 	databaseID, runID                          int64
+	annotations                                []Annotation
 }
 
-func (c checkRun) ID() string    { return c.id }
-func (c checkRun) Failing() bool { return work.IsFailingCheckRunConclusion(c.conclusion) }
+func (c checkRun) ID() string                { return c.id }
+func (c checkRun) Failing() bool             { return work.IsFailingCheckRunConclusion(c.conclusion) }
+func (c checkRun) Annotations() []Annotation { return c.annotations }
 func (c checkRun) Check() work.Check {
 	return work.Check{Name: c.name, Conclusion: c.conclusion, URL: c.detailsURL, Workflow: c.workflow, RunID: c.runID, JobID: c.databaseID}
 }
@@ -255,6 +328,9 @@ type statusContext struct {
 
 func (c statusContext) ID() string    { return c.id }
 func (c statusContext) Failing() bool { return work.IsFailingStatusState(c.state) }
+
+// Annotations is always nil: commit statuses have no annotations.
+func (c statusContext) Annotations() []Annotation { return nil }
 func (c statusContext) Check() work.Check {
 	return work.Check{Name: c.context, Conclusion: c.state, URL: c.targetURL}
 }
@@ -270,11 +346,32 @@ var checkContextDecoders = map[string]func(rawCheckContextNode) CheckContext{
 			cr.runID = n.CheckSuite.WorkflowRun.DatabaseID
 			cr.workflow = n.CheckSuite.WorkflowRun.Workflow.Name
 		}
+		if n.Annotations != nil {
+			cr.annotations = make([]Annotation, 0, len(n.Annotations.Nodes))
+			for _, a := range n.Annotations.Nodes {
+				cr.annotations = append(cr.annotations, annotationFromRaw(a))
+			}
+		}
 		return cr
 	},
 	"StatusContext": func(n rawCheckContextNode) CheckContext {
 		return statusContext{id: n.ID, context: n.Context, state: n.State, targetURL: n.TargetURL}
 	},
+}
+
+func annotationFromRaw(n rawAnnotationNode) Annotation {
+	a := Annotation{
+		Level: n.AnnotationLevel, Path: n.Path,
+		StartLine: n.Location.Start.Line, EndLine: n.Location.End.Line,
+		Message: n.Message, URL: n.BlobURL,
+	}
+	if n.DatabaseID != nil {
+		a.DatabaseID = *n.DatabaseID
+	}
+	if n.Title != nil {
+		a.Title = *n.Title
+	}
+	return a
 }
 
 func decodeCheckContext(n rawCheckContextNode) (CheckContext, bool) {
@@ -371,6 +468,12 @@ type contextsPageResponse struct {
 	} `json:"node"`
 }
 
+type annotationsPageResponse struct {
+	Node struct {
+		Annotations *rawAnnotationsConnection `json:"annotations"`
+	} `json:"node"`
+}
+
 type rawRepo struct {
 	NameWithOwner    string `json:"nameWithOwner"`
 	IsArchived       bool   `json:"isArchived"`
@@ -397,7 +500,7 @@ type repoResponse struct {
 // pullRequestFromRaw converts a decoded PR node into scan's typed shape,
 // fetching any overflow pages (threads beyond 30, check contexts beyond
 // 100) its connections report.
-func pullRequestFromRaw(ctx context.Context, gh github.Client, repo string, n rawPR) (PullRequest, error) {
+func pullRequestFromRaw(ctx context.Context, gh github.Client, repo string, n rawPR, withAnnotations bool) (PullRequest, error) {
 	pr := PullRequest{
 		ID: n.ID, Repo: repo, Number: n.Number, Title: n.Title, URL: n.URL,
 		HeadRef: n.HeadRefName, BaseRef: n.BaseRefName, IsDraft: n.IsDraft, Mergeable: n.Mergeable,
@@ -410,7 +513,7 @@ func pullRequestFromRaw(ctx context.Context, gh github.Client, repo string, n ra
 	pr.ReviewThreads = threads
 
 	if n.Commits != nil && len(n.Commits.Nodes) > 0 {
-		commit, err := commitFromRaw(ctx, gh, &n.Commits.Nodes[0].Commit)
+		commit, err := commitFromRaw(ctx, gh, &n.Commits.Nodes[0].Commit, withAnnotations)
 		if err != nil {
 			return PullRequest{}, err
 		}
@@ -467,21 +570,21 @@ func fetchRemainingThreads(ctx context.Context, gh github.Client, prID, cursor s
 	return out, err
 }
 
-func commitFromRaw(ctx context.Context, gh github.Client, c *rawCommit) (*Commit, error) {
+func commitFromRaw(ctx context.Context, gh github.Client, c *rawCommit, withAnnotations bool) (*Commit, error) {
 	if c == nil || c.StatusCheckRollup == nil {
 		return nil, nil
 	}
-	contexts, err := contextsFromRaw(ctx, gh, c.ID, c.StatusCheckRollup.Contexts)
+	contexts, err := contextsFromRaw(ctx, gh, c.ID, c.StatusCheckRollup.Contexts, withAnnotations)
 	if err != nil {
 		return nil, err
 	}
 	return &Commit{ID: c.ID, Oid: c.Oid, Contexts: contexts}, nil
 }
 
-func contextsFromRaw(ctx context.Context, gh github.Client, commitID string, conn rawContextsConnection) ([]CheckContext, error) {
+func contextsFromRaw(ctx context.Context, gh github.Client, commitID string, conn rawContextsConnection, withAnnotations bool) ([]CheckContext, error) {
 	nodes := conn.Nodes
 	if conn.PageInfo.HasNextPage {
-		more, err := fetchRemainingContexts(ctx, gh, commitID, conn.PageInfo.EndCursor)
+		more, err := fetchRemainingContexts(ctx, gh, commitID, conn.PageInfo.EndCursor, withAnnotations)
 		if err != nil {
 			return nil, err
 		}
@@ -489,6 +592,18 @@ func contextsFromRaw(ctx context.Context, gh github.Client, commitID string, con
 	}
 	out := make([]CheckContext, 0, len(nodes))
 	for _, n := range nodes {
+		if !withAnnotations {
+			// Keeps CheckContext.Annotations' "nil unless requested"
+			// promise independent of what the response happened to carry.
+			n.Annotations = nil
+		}
+		if n.Annotations != nil && n.Annotations.PageInfo.HasNextPage {
+			more, err := fetchRemainingAnnotations(ctx, gh, n.ID, n.Annotations.PageInfo.EndCursor)
+			if err != nil {
+				return nil, err
+			}
+			n.Annotations.Nodes = append(n.Annotations.Nodes, more...)
+		}
 		if cc, ok := decodeCheckContext(n); ok {
 			out = append(out, cc)
 		}
@@ -496,11 +611,12 @@ func contextsFromRaw(ctx context.Context, gh github.Client, commitID string, con
 	return out, nil
 }
 
-func fetchRemainingContexts(ctx context.Context, gh github.Client, commitID, cursor string) ([]rawCheckContextNode, error) {
+func fetchRemainingContexts(ctx context.Context, gh github.Client, commitID, cursor string, withAnnotations bool) ([]rawCheckContextNode, error) {
+	query := buildContextsPageQuery(withAnnotations)
 	var out []rawCheckContextNode
 	err := github.PaginateFrom(ctx, cursor, func(ctx context.Context, c string) (github.PageInfo, error) {
 		var resp contextsPageResponse
-		if err := gh.Query(ctx, contextsPageQuery, map[string]any{"id": commitID, "after": c}, &resp); err != nil {
+		if err := gh.Query(ctx, query, map[string]any{"id": commitID, "after": c}, &resp); err != nil {
 			return github.PageInfo{}, err
 		}
 		if resp.Node.StatusCheckRollup == nil {
@@ -512,11 +628,27 @@ func fetchRemainingContexts(ctx context.Context, gh github.Client, commitID, cur
 	return out, err
 }
 
+func fetchRemainingAnnotations(ctx context.Context, gh github.Client, checkRunID, cursor string) ([]rawAnnotationNode, error) {
+	var out []rawAnnotationNode
+	err := github.PaginateFrom(ctx, cursor, func(ctx context.Context, c string) (github.PageInfo, error) {
+		var resp annotationsPageResponse
+		if err := gh.Query(ctx, annotationsPageQuery, map[string]any{"id": checkRunID, "after": c}, &resp); err != nil {
+			return github.PageInfo{}, err
+		}
+		if resp.Node.Annotations == nil {
+			return github.PageInfo{}, nil
+		}
+		out = append(out, resp.Node.Annotations.Nodes...)
+		return resp.Node.Annotations.PageInfo, nil
+	})
+	return out, err
+}
+
 func branchFromRaw(ctx context.Context, gh github.Client, repo rawRepo) (*Branch, error) {
 	if repo.DefaultBranchRef == nil || repo.DefaultBranchRef.Target == nil {
 		return nil, nil
 	}
-	commit, err := commitFromRaw(ctx, gh, repo.DefaultBranchRef.Target)
+	commit, err := commitFromRaw(ctx, gh, repo.DefaultBranchRef.Target, false)
 	if err != nil {
 		return nil, err
 	}

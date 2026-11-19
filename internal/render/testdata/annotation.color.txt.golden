@@ -1,0 +1,6 @@
+[1mo/r[0m
+  PR #2 Add feature https://github.com/o/r/pull/2
+    [36m[pr-annotation][0m main.go:7 lint https://github.com/o/r/runs/3 (run 300 job 400)
+        [31merrcheck: Error return value is not checked …[0m
+    [36m[pr-annotation][0m util.go:3-9 lint https://github.com/o/r/runs/3 (run 300 job 400)
+        [31mFunction is too long[0m

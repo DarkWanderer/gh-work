@@ -26,9 +26,9 @@ go build -o gh-work . && ./gh-work owner/repo
 - `internal/target` — sealed `Target` (`Org | Repo | PR`), its parser, and
   the `Visitor` interface callers implement instead of a type switch.
 - `internal/work` — sealed `Group` (`PullRequest | Branch`) and sealed
-  `PRItem` (`ReviewThread | PRCheckFailure | MergeConflict`) nested inside a
-  `PullRequest`, plus their `GroupVisitor`/`PRItemVisitor` interfaces and the
-  shared `Check`/conclusion types.
+  `PRItem` (`ReviewThread | PRCheckFailure | PRAnnotation | MergeConflict`)
+  nested inside a `PullRequest`, plus their `GroupVisitor`/`PRItemVisitor`
+  interfaces and the shared `Check`/conclusion types.
 - `internal/github` — the `Client` interface (one method: `Query`) over
   go-gh's GraphQL client, plus `Paginate`/`PaginateFrom`.
 - `internal/github/fake` — a test double for `Client` that dispatches
